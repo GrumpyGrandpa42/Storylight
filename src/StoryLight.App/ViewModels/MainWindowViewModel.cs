@@ -670,6 +670,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             await _textToSpeechService.SpeakAsync(_pages[CurrentPageIndex].Text);
             _activeSpeechPageIndex = CurrentPageIndex;
             Status = "Reading current page aloud.";
+            _ = PrefetchNextPageAsync(CurrentPageIndex);
         }
         catch (Exception ex)
         {
@@ -677,6 +678,22 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         }
 
         RefreshCommandStates();
+    }
+
+    private async Task PrefetchNextPageAsync(int currentPageIndex)
+    {
+        if (!ContinueToNextPage || currentPageIndex >= _pages.Count - 1)
+        {
+            return;
+        }
+
+        try
+        {
+            await _textToSpeechService.PrefetchAsync(_pages[currentPageIndex + 1].Text);
+        }
+        catch
+        {
+        }
     }
 
     private async Task PauseSpeechAsync()

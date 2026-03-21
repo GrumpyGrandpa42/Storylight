@@ -1,4 +1,5 @@
 using NAudio.Wave;
+using NAudio.Wave.SampleProviders;
 using SherpaOnnx;
 using StoryLight.App.Models;
 
@@ -6,6 +7,8 @@ namespace StoryLight.App.Services;
 
 public sealed class SherpaOnnxSpeechService : ITextToSpeechService
 {
+    private static readonly TimeSpan LeadInDuration = TimeSpan.FromMilliseconds(250);
+
     public event EventHandler? PlaybackCompleted;
 
     private readonly SemaphoreSlim _mutex = new(1, 1);
@@ -13,10 +16,12 @@ public sealed class SherpaOnnxSpeechService : ITextToSpeechService
     private readonly Dictionary<string, OfflineTts> _engineCache = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, SherpaVoiceDefinition> _voiceDefinitions = new(StringComparer.OrdinalIgnoreCase);
     private CancellationTokenSource? _generationCts;
+    private CancellationTokenSource? _prefetchCts;
     private CancellationTokenSource? _playbackMonitorCts;
     private WaveOutEvent? _waveOut;
     private RawSourceWaveStream? _audioStream;
     private MemoryStream? _audioBuffer;
+    private PreparedSpeech? _preparedSpeech;
     private bool _disposed;
     private int _rate;
     private IReadOnlyList<TtsVoiceInfo> _voices = Array.Empty<TtsVoiceInfo>();
@@ -69,12 +74,15 @@ public sealed class SherpaOnnxSpeechService : ITextToSpeechService
             if (_voices.Count == 0)
             {
                 SelectedVoiceId = null;
+                _preparedSpeech = null;
                 CancelGenerationCore();
+                CancelPrefetchCore();
                 StopPlaybackCore();
             }
             else if (string.IsNullOrWhiteSpace(SelectedVoiceId) || !_voiceDefinitions.ContainsKey(SelectedVoiceId))
             {
                 SelectedVoiceId = _voices[0].Id;
+                _preparedSpeech = null;
             }
 
             StatusSummary = discovery.StatusSummary;
@@ -94,10 +102,97 @@ public sealed class SherpaOnnxSpeechService : ITextToSpeechService
         {
             ThrowIfDisposed();
             SelectedVoiceId = _voices.FirstOrDefault(voice => voice.Id == voiceId)?.Id ?? _voices.FirstOrDefault()?.Id;
+            _preparedSpeech = null;
         }
         finally
         {
             _mutex.Release();
+        }
+    }
+
+    public async Task PrefetchAsync(string text, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return;
+        }
+
+        SherpaVoiceDefinition definition;
+        OfflineTts engine;
+        string? selectedVoiceId;
+        int selectedRate;
+        CancellationTokenSource prefetchCts;
+
+        await _mutex.WaitAsync(cancellationToken);
+        try
+        {
+            ThrowIfDisposed();
+
+            if (SelectedVoiceId is null || !_voiceDefinitions.TryGetValue(SelectedVoiceId, out definition!))
+            {
+                return;
+            }
+
+            selectedVoiceId = SelectedVoiceId;
+            selectedRate = Rate;
+
+            if (MatchesPreparedSpeech(selectedVoiceId, selectedRate, text))
+            {
+                return;
+            }
+
+            CancelPrefetchCore();
+            engine = GetOrCreateEngineCore(definition);
+            prefetchCts = new CancellationTokenSource();
+            _prefetchCts = prefetchCts;
+        }
+        finally
+        {
+            _mutex.Release();
+        }
+
+        OfflineTtsGeneratedAudio? generatedAudio = null;
+        try
+        {
+            var speed = MapRateToSpeed(selectedRate);
+            generatedAudio = await Task.Run(() => engine.Generate(text, speed, definition.SpeakerId), CancellationToken.None);
+            var audioBytes = ConvertSamplesToBytes(generatedAudio.Samples);
+
+            await _mutex.WaitAsync(cancellationToken);
+            try
+            {
+                if (prefetchCts.IsCancellationRequested || !ReferenceEquals(_prefetchCts, prefetchCts))
+                {
+                    return;
+                }
+
+                _preparedSpeech = new PreparedSpeech(selectedVoiceId!, selectedRate, text, audioBytes, generatedAudio.SampleRate);
+                _prefetchCts = null;
+            }
+            finally
+            {
+                _mutex.Release();
+            }
+        }
+        catch
+        {
+            await _mutex.WaitAsync(CancellationToken.None);
+            try
+            {
+                if (ReferenceEquals(_prefetchCts, prefetchCts))
+                {
+                    _prefetchCts = null;
+                }
+            }
+            finally
+            {
+                _mutex.Release();
+            }
+        }
+        finally
+        {
+            generatedAudio?.Dispose();
+            prefetchCts.Dispose();
         }
     }
 
@@ -111,6 +206,7 @@ public sealed class SherpaOnnxSpeechService : ITextToSpeechService
         SherpaVoiceDefinition definition;
         OfflineTts engine;
         CancellationTokenSource generationCts;
+        int selectedRate;
 
         await _mutex.WaitAsync(cancellationToken);
         try
@@ -123,9 +219,19 @@ public sealed class SherpaOnnxSpeechService : ITextToSpeechService
             }
 
             CancelGenerationCore();
+            CancelPrefetchCore();
             StopPlaybackCore();
 
+            if (MatchesPreparedSpeech(SelectedVoiceId, Rate, text))
+            {
+                var preparedSpeech = _preparedSpeech!;
+                _preparedSpeech = null;
+                StartPlaybackCore(preparedSpeech.AudioBytes, preparedSpeech.SampleRate);
+                return;
+            }
+
             engine = GetOrCreateEngineCore(definition);
+            selectedRate = Rate;
             generationCts = new CancellationTokenSource();
             _generationCts = generationCts;
             IsSpeaking = true;
@@ -139,8 +245,9 @@ public sealed class SherpaOnnxSpeechService : ITextToSpeechService
         OfflineTtsGeneratedAudio? generatedAudio = null;
         try
         {
-            var speed = MapRateToSpeed(Rate);
+            var speed = MapRateToSpeed(selectedRate);
             generatedAudio = await Task.Run(() => engine.Generate(text, speed, definition.SpeakerId), CancellationToken.None);
+            var audioBytes = ConvertSamplesToBytes(generatedAudio.Samples);
 
             await _mutex.WaitAsync(cancellationToken);
             try
@@ -150,7 +257,7 @@ public sealed class SherpaOnnxSpeechService : ITextToSpeechService
                     return;
                 }
 
-                StartPlaybackCore(generatedAudio);
+                StartPlaybackCore(audioBytes, generatedAudio.SampleRate);
                 generatedAudio = null;
             }
             finally
@@ -160,7 +267,7 @@ public sealed class SherpaOnnxSpeechService : ITextToSpeechService
         }
         catch
         {
-            await _mutex.WaitAsync(cancellationToken);
+            await _mutex.WaitAsync(CancellationToken.None);
             try
             {
                 if (ReferenceEquals(_generationCts, generationCts))
@@ -231,6 +338,8 @@ public sealed class SherpaOnnxSpeechService : ITextToSpeechService
         try
         {
             CancelGenerationCore();
+            CancelPrefetchCore();
+            _preparedSpeech = null;
             StopPlaybackCore();
         }
         finally
@@ -249,6 +358,7 @@ public sealed class SherpaOnnxSpeechService : ITextToSpeechService
         _disposed = true;
 
         CancelGenerationCore();
+        CancelPrefetchCore();
         StopPlaybackCore();
 
         foreach (var engine in _engineCache.Values)
@@ -281,13 +391,17 @@ public sealed class SherpaOnnxSpeechService : ITextToSpeechService
         }
     }
 
-    private void StartPlaybackCore(OfflineTtsGeneratedAudio generatedAudio)
+    private void StartPlaybackCore(byte[] audioBytes, int sampleRate)
     {
-        var audioBytes = ConvertSamplesToBytes(generatedAudio.Samples);
         _audioBuffer = new MemoryStream(audioBytes, writable: false);
-        _audioStream = new RawSourceWaveStream(_audioBuffer, WaveFormat.CreateIeeeFloatWaveFormat(generatedAudio.SampleRate, 1));
+        _audioStream = new RawSourceWaveStream(_audioBuffer, WaveFormat.CreateIeeeFloatWaveFormat(sampleRate, 1));
+        var sampleProvider = new OffsetSampleProvider(_audioStream.ToSampleProvider())
+        {
+            DelayBy = LeadInDuration
+        };
+
         _waveOut = new WaveOutEvent();
-        _waveOut.Init(_audioStream);
+        _waveOut.Init(sampleProvider.ToWaveProvider());
         _waveOut.Play();
 
         _generationCts = null;
@@ -324,7 +438,7 @@ public sealed class SherpaOnnxSpeechService : ITextToSpeechService
                     return;
                 }
 
-                await Task.Delay(150, cancellationToken);
+                await Task.Delay(50, cancellationToken);
             }
         }
         catch (OperationCanceledException)
@@ -336,6 +450,13 @@ public sealed class SherpaOnnxSpeechService : ITextToSpeechService
     {
         _generationCts?.Cancel();
         _generationCts = null;
+    }
+
+    private void CancelPrefetchCore()
+    {
+        _prefetchCts?.Cancel();
+        _prefetchCts?.Dispose();
+        _prefetchCts = null;
     }
 
     private void StopPlaybackCore()
@@ -372,6 +493,14 @@ public sealed class SherpaOnnxSpeechService : ITextToSpeechService
         _playbackMonitorCts = null;
     }
 
+    private bool MatchesPreparedSpeech(string? voiceId, int rate, string text)
+    {
+        return _preparedSpeech is not null
+            && string.Equals(_preparedSpeech.VoiceId, voiceId, StringComparison.OrdinalIgnoreCase)
+            && _preparedSpeech.Rate == rate
+            && string.Equals(_preparedSpeech.Text, text, StringComparison.Ordinal);
+    }
+
     private static byte[] ConvertSamplesToBytes(float[] samples)
     {
         var bytes = new byte[samples.Length * sizeof(float)];
@@ -400,4 +529,6 @@ public sealed class SherpaOnnxSpeechService : ITextToSpeechService
             throw new ObjectDisposedException(nameof(SherpaOnnxSpeechService));
         }
     }
+
+    private sealed record PreparedSpeech(string VoiceId, int Rate, string Text, byte[] AudioBytes, int SampleRate);
 }

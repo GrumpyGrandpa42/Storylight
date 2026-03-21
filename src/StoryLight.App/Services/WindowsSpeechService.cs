@@ -1,4 +1,5 @@
 using NAudio.Wave;
+using NAudio.Wave.SampleProviders;
 using StoryLight.App.Models;
 using Windows.Media.SpeechSynthesis;
 using Windows.Storage.Streams;
@@ -7,14 +8,18 @@ namespace StoryLight.App.Services;
 
 public sealed class WindowsSpeechService : ITextToSpeechService
 {
+    private static readonly TimeSpan LeadInDuration = TimeSpan.FromMilliseconds(250);
+
     public event EventHandler? PlaybackCompleted;
 
     private readonly SemaphoreSlim _mutex = new(1, 1);
     private SpeechSynthesizer? _synthesizer;
+    private CancellationTokenSource? _prefetchCts;
     private CancellationTokenSource? _playbackMonitorCts;
     private WaveOutEvent? _waveOut;
     private WaveFileReader? _waveReader;
     private MemoryStream? _audioBuffer;
+    private PreparedSpeech? _preparedSpeech;
     private bool _disposed;
     private int _rate;
     private IReadOnlyList<TtsVoiceInfo> _voices = Array.Empty<TtsVoiceInfo>();
@@ -68,6 +73,7 @@ public sealed class WindowsSpeechService : ITextToSpeechService
             if (_voices.Count == 0)
             {
                 SelectedVoiceId = null;
+                _preparedSpeech = null;
                 return;
             }
 
@@ -76,8 +82,8 @@ public sealed class WindowsSpeechService : ITextToSpeechService
                 SelectedVoiceId = _voices[0].Id;
             }
 
-            ApplySelectedVoice(synthesizer);
-            ApplyRate(synthesizer);
+            ApplySelectedVoice(synthesizer, SelectedVoiceId);
+            ApplyRate(synthesizer, Rate);
         }
         finally
         {
@@ -94,15 +100,93 @@ public sealed class WindowsSpeechService : ITextToSpeechService
         {
             ThrowIfDisposed();
             SelectedVoiceId = _voices.FirstOrDefault(voice => voice.Id == voiceId)?.Id ?? _voices.FirstOrDefault()?.Id;
+            _preparedSpeech = null;
 
             if (_synthesizer is not null)
             {
-                ApplySelectedVoice(_synthesizer);
+                ApplySelectedVoice(_synthesizer, SelectedVoiceId);
             }
         }
         finally
         {
             _mutex.Release();
+        }
+    }
+
+    public async Task PrefetchAsync(string text, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(text) || !OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        string? selectedVoiceId;
+        int selectedRate;
+        CancellationTokenSource prefetchCts;
+
+        cancellationToken.ThrowIfCancellationRequested();
+
+        await _mutex.WaitAsync(cancellationToken);
+        try
+        {
+            ThrowIfDisposed();
+            selectedVoiceId = SelectedVoiceId;
+            selectedRate = Rate;
+
+            if (MatchesPreparedSpeech(selectedVoiceId, selectedRate, text))
+            {
+                return;
+            }
+
+            CancelPrefetchCore();
+            prefetchCts = new CancellationTokenSource();
+            _prefetchCts = prefetchCts;
+        }
+        finally
+        {
+            _mutex.Release();
+        }
+
+        try
+        {
+            using var synthesizer = CreateConfiguredSynthesizer(selectedVoiceId, selectedRate);
+            using var stream = await synthesizer.SynthesizeTextToStreamAsync(text);
+            var audioBytes = await ReadSpeechBytesAsync(stream, cancellationToken);
+
+            await _mutex.WaitAsync(cancellationToken);
+            try
+            {
+                if (prefetchCts.IsCancellationRequested || !ReferenceEquals(_prefetchCts, prefetchCts))
+                {
+                    return;
+                }
+
+                _preparedSpeech = new PreparedSpeech(selectedVoiceId, selectedRate, text, audioBytes);
+                _prefetchCts = null;
+            }
+            finally
+            {
+                _mutex.Release();
+            }
+        }
+        catch
+        {
+            await _mutex.WaitAsync(CancellationToken.None);
+            try
+            {
+                if (ReferenceEquals(_prefetchCts, prefetchCts))
+                {
+                    _prefetchCts = null;
+                }
+            }
+            finally
+            {
+                _mutex.Release();
+            }
+        }
+        finally
+        {
+            prefetchCts.Dispose();
         }
     }
 
@@ -119,11 +203,20 @@ public sealed class WindowsSpeechService : ITextToSpeechService
         try
         {
             ThrowIfDisposed();
+            CancelPrefetchCore();
             StopPlaybackCore();
 
+            if (MatchesPreparedSpeech(SelectedVoiceId, Rate, text))
+            {
+                var preparedAudio = _preparedSpeech!.AudioBytes;
+                _preparedSpeech = null;
+                StartPlayback(preparedAudio);
+                return;
+            }
+
             var synthesizer = EnsureSynthesizer();
-            ApplySelectedVoice(synthesizer);
-            ApplyRate(synthesizer);
+            ApplySelectedVoice(synthesizer, SelectedVoiceId);
+            ApplyRate(synthesizer, Rate);
 
             using var stream = await synthesizer.SynthesizeTextToStreamAsync(text);
             var audioBytes = await ReadSpeechBytesAsync(stream, cancellationToken);
@@ -180,6 +273,8 @@ public sealed class WindowsSpeechService : ITextToSpeechService
         await _mutex.WaitAsync();
         try
         {
+            CancelPrefetchCore();
+            _preparedSpeech = null;
             StopPlaybackCore();
         }
         finally
@@ -196,6 +291,7 @@ public sealed class WindowsSpeechService : ITextToSpeechService
         }
 
         _disposed = true;
+        CancelPrefetchCore();
         CancelPlaybackMonitor();
         StopPlaybackCore();
         _synthesizer?.Dispose();
@@ -205,19 +301,27 @@ public sealed class WindowsSpeechService : ITextToSpeechService
 
     private SpeechSynthesizer EnsureSynthesizer()
     {
-        _synthesizer ??= new SpeechSynthesizer();
+        _synthesizer ??= CreateConfiguredSynthesizer(SelectedVoiceId, Rate);
         return _synthesizer;
     }
 
-    private void ApplySelectedVoice(SpeechSynthesizer synthesizer)
+    private static SpeechSynthesizer CreateConfiguredSynthesizer(string? selectedVoiceId, int rate)
     {
-        if (string.IsNullOrWhiteSpace(SelectedVoiceId))
+        var synthesizer = new SpeechSynthesizer();
+        ApplySelectedVoice(synthesizer, selectedVoiceId);
+        ApplyRate(synthesizer, rate);
+        return synthesizer;
+    }
+
+    private static void ApplySelectedVoice(SpeechSynthesizer synthesizer, string? selectedVoiceId)
+    {
+        if (string.IsNullOrWhiteSpace(selectedVoiceId))
         {
             return;
         }
 
         var voice = SpeechSynthesizer.AllVoices.FirstOrDefault(candidate =>
-            string.Equals(candidate.Id, SelectedVoiceId, StringComparison.OrdinalIgnoreCase));
+            string.Equals(candidate.Id, selectedVoiceId, StringComparison.OrdinalIgnoreCase));
 
         if (voice is not null)
         {
@@ -225,9 +329,9 @@ public sealed class WindowsSpeechService : ITextToSpeechService
         }
     }
 
-    private void ApplyRate(SpeechSynthesizer synthesizer)
+    private static void ApplyRate(SpeechSynthesizer synthesizer, int rate)
     {
-        synthesizer.Options.SpeakingRate = Rate switch
+        synthesizer.Options.SpeakingRate = rate switch
         {
             <= -3 => 0.6,
             -2 => 0.75,
@@ -243,8 +347,13 @@ public sealed class WindowsSpeechService : ITextToSpeechService
     {
         _audioBuffer = new MemoryStream(audioBytes, writable: false);
         _waveReader = new WaveFileReader(_audioBuffer);
+        var sampleProvider = new OffsetSampleProvider(_waveReader.ToSampleProvider())
+        {
+            DelayBy = LeadInDuration
+        };
+
         _waveOut = new WaveOutEvent();
-        _waveOut.Init(_waveReader);
+        _waveOut.Init(sampleProvider.ToWaveProvider());
         _waveOut.Play();
 
         _playbackMonitorCts = new CancellationTokenSource();
@@ -280,7 +389,7 @@ public sealed class WindowsSpeechService : ITextToSpeechService
                     return;
                 }
 
-                await Task.Delay(150, cancellationToken);
+                await Task.Delay(50, cancellationToken);
             }
         }
         catch (OperationCanceledException)
@@ -315,6 +424,13 @@ public sealed class WindowsSpeechService : ITextToSpeechService
         _audioBuffer = null;
     }
 
+    private void CancelPrefetchCore()
+    {
+        _prefetchCts?.Cancel();
+        _prefetchCts?.Dispose();
+        _prefetchCts = null;
+    }
+
     private void CancelPlaybackMonitor()
     {
         _playbackMonitorCts?.Cancel();
@@ -340,6 +456,14 @@ public sealed class WindowsSpeechService : ITextToSpeechService
             : $"{voice.DisplayName} ({voice.Language})";
     }
 
+    private bool MatchesPreparedSpeech(string? voiceId, int rate, string text)
+    {
+        return _preparedSpeech is not null
+            && string.Equals(_preparedSpeech.VoiceId, voiceId, StringComparison.OrdinalIgnoreCase)
+            && _preparedSpeech.Rate == rate
+            && string.Equals(_preparedSpeech.Text, text, StringComparison.Ordinal);
+    }
+
     private void ThrowIfDisposed()
     {
         if (_disposed)
@@ -347,4 +471,6 @@ public sealed class WindowsSpeechService : ITextToSpeechService
             throw new ObjectDisposedException(nameof(WindowsSpeechService));
         }
     }
+
+    private sealed record PreparedSpeech(string? VoiceId, int Rate, string Text, byte[] AudioBytes);
 }

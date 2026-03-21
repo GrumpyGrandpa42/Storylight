@@ -32,6 +32,9 @@ public sealed class NullTextToSpeechService : ITextToSpeechService
     public Task SetVoiceAsync(string? voiceId, CancellationToken cancellationToken = default)
         => Task.CompletedTask;
 
+    public Task PrefetchAsync(string text, CancellationToken cancellationToken = default)
+        => Task.CompletedTask;
+
     public Task SpeakAsync(string text, CancellationToken cancellationToken = default)
         => Task.CompletedTask;
 

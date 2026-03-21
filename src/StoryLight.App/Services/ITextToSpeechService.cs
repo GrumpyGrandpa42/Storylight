@@ -18,6 +18,7 @@ public interface ITextToSpeechService : IDisposable
     Task InitializeAsync(SpeechSettings settings, CancellationToken cancellationToken = default);
     Task RefreshAsync(CancellationToken cancellationToken = default);
     Task SetVoiceAsync(string? voiceId, CancellationToken cancellationToken = default);
+    Task PrefetchAsync(string text, CancellationToken cancellationToken = default);
     Task SpeakAsync(string text, CancellationToken cancellationToken = default);
     Task PauseAsync();
     Task ResumeAsync();

@@ -110,6 +110,18 @@ public sealed class HybridTextToSpeechService : ITextToSpeechService
         await selection.Service.SetVoiceAsync(selection.InnerVoiceId, cancellationToken);
     }
 
+    public async Task PrefetchAsync(string text, CancellationToken cancellationToken = default)
+    {
+        var selection = GetSelectedSelection();
+        if (selection is null)
+        {
+            return;
+        }
+
+        await selection.Value.Service.SetVoiceAsync(selection.Value.InnerVoiceId, cancellationToken);
+        await selection.Value.Service.PrefetchAsync(text, cancellationToken);
+    }
+
     public async Task SpeakAsync(string text, CancellationToken cancellationToken = default)
     {
         var selection = GetSelectedSelection();

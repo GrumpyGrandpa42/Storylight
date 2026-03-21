@@ -1,0 +1,95 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        x:Class="StoryLight.App.Views.MainWindow"
+        Width="1360"
+        Height="860"
+        MinWidth="1080"
+        MinHeight="720"
+        Title="StoryLight">
+  <Grid RowDefinitions="Auto,*,Auto" Background="#E9DFC8">
+    <Border Grid.Row="0" Background="#E1D3B5" BorderBrush="#C7B89C" BorderThickness="0,0,0,1" Padding="18">
+      <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,*,Auto,Auto">
+        <Button Classes="toolbar" Content="Import" Command="{Binding ImportDocumentCommand}" />
+        <Button Classes="toolbar" Grid.Column="1" Margin="8,0,0,0" Content="Open" Command="{Binding OpenSelectedCommand}" />
+        <Button Classes="toolbar" Grid.Column="2" Margin="8,0,0,0" Content="Remove" Command="{Binding RemoveSelectedCommand}" />
+        <Button Classes="toolbar" Grid.Column="3" Margin="16,0,0,0" Content="Previous" Command="{Binding PreviousPageCommand}" />
+        <Button Classes="toolbar" Grid.Column="4" Margin="8,0,0,0" Content="Next" Command="{Binding NextPageCommand}" />
+        <Button Classes="toolbar" Grid.Column="5" Margin="16,0,0,0" Content="A-" Command="{Binding ZoomOutCommand}" />
+        <Button Classes="toolbar" Grid.Column="6" Margin="8,0,0,0" Content="A+" Command="{Binding ZoomInCommand}" />
+        <TextBlock Grid.Column="7" Margin="12,0,0,0" Text="{Binding ZoomDisplay}" VerticalAlignment="Center" FontWeight="SemiBold" />
+        <StackPanel Grid.Column="9" Orientation="Horizontal" Spacing="8" IsEnabled="{Binding IsTextToSpeechAvailable}">
+          <ComboBox Width="76" ItemsSource="{Binding SpeechRates}" SelectedItem="{Binding SpeechRate}" />
+          <Button Classes="toolbar" Content="Read" Command="{Binding ReadAloudCommand}" />
+          <Button Classes="toolbar" Content="Pause" Command="{Binding PauseSpeechCommand}" />
+          <Button Classes="toolbar" Content="Resume" Command="{Binding ResumeSpeechCommand}" />
+          <Button Classes="toolbar" Content="Stop" Command="{Binding StopSpeechCommand}" />
+        </StackPanel>
+      </Grid>
+    </Border>
+
+    <Grid Grid.Row="1" ColumnDefinitions="300,*" Margin="18">
+      <Border Background="#F1E7D1" BorderBrush="#C7B89C" BorderThickness="1" CornerRadius="12" Padding="14">
+        <Grid RowDefinitions="Auto,*">
+          <StackPanel Spacing="4">
+            <TextBlock Text="Library" FontSize="22" FontWeight="Bold" />
+            <TextBlock Text="Recent books and documents with saved progress." Foreground="#6B5B45" TextWrapping="Wrap" />
+          </StackPanel>
+
+          <ListBox Grid.Row="1"
+                   Margin="0,14,0,0"
+                   ItemsSource="{Binding LibraryItems}"
+                   SelectedItem="{Binding SelectedLibraryItem}">
+            <ListBox.ItemTemplate>
+              <DataTemplate>
+                <Border Background="#FFF9ED" BorderBrush="#D5C6A8" BorderThickness="1" CornerRadius="10" Margin="0,0,0,10" Padding="10">
+                  <StackPanel Spacing="4">
+                    <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding Subtitle}" Foreground="#6B5B45" FontSize="12" TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding ProgressText}" FontSize="12" FontWeight="SemiBold" />
+                    <TextBlock Text="{Binding LastOpenedDisplay}" FontSize="11" Foreground="#8B7758" />
+                  </StackPanel>
+                </Border>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+        </Grid>
+      </Border>
+
+      <Grid Grid.Column="1" Margin="18,0,0,0" RowDefinitions="Auto,*,Auto">
+        <StackPanel Spacing="6">
+          <TextBlock Text="{Binding DocumentTitle}" FontSize="28" FontWeight="Bold" TextWrapping="Wrap" />
+          <TextBlock Text="{Binding DocumentSubtitle}" FontSize="15" Foreground="#6B5B45" TextWrapping="Wrap" />
+        </StackPanel>
+
+        <Grid Grid.Row="1" RowDefinitions="Auto,*" Margin="0,18,0,18">
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBlock Text="{Binding PageTitle}" FontSize="18" FontWeight="SemiBold" />
+            <TextBlock Grid.Column="1" Text="{Binding PageStatus}" FontWeight="SemiBold" Foreground="#6B5B45" />
+          </Grid>
+
+          <Border Grid.Row="1" Classes="page" Padding="30" Margin="0,12,0,0">
+            <ScrollViewer>
+              <TextBlock Text="{Binding PageText}"
+                         TextWrapping="Wrap"
+                         FontSize="{Binding ReaderFontSize}"
+                         LineHeight="{Binding ReaderFontSize}"
+                         FontFamily="Georgia, Times New Roman, Serif" />
+            </ScrollViewer>
+          </Border>
+        </Grid>
+
+        <Border Grid.Row="2" Background="#F1E7D1" BorderBrush="#C7B89C" BorderThickness="1" CornerRadius="12" Padding="12">
+          <TextBlock Text="{Binding Status}" TextWrapping="Wrap" />
+        </Border>
+      </Grid>
+    </Grid>
+
+    <Border Grid.Row="2" Background="#E1D3B5" BorderBrush="#C7B89C" BorderThickness="0,1,0,0" Padding="10">
+      <TextBlock HorizontalAlignment="Center"
+                 Text="Page Left/Right to navigate. Ctrl + Plus/Minus to zoom. Read-aloud uses Windows voices when available." />
+    </Border>
+  </Grid>
+</Window>

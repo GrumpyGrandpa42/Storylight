@@ -18,6 +18,8 @@ public sealed class SherpaOnnxSpeechService : ITextToSpeechService
     private CancellationTokenSource? _generationCts;
     private CancellationTokenSource? _prefetchCts;
     private CancellationTokenSource? _playbackMonitorCts;
+    private Task? _activeGenerationTask;
+    private Task? _activePrefetchTask;
     private WaveOutEvent? _waveOut;
     private RawSourceWaveStream? _audioStream;
     private MemoryStream? _audioBuffer;
@@ -152,10 +154,22 @@ public sealed class SherpaOnnxSpeechService : ITextToSpeechService
         }
 
         OfflineTtsGeneratedAudio? generatedAudio = null;
+        Task<OfflineTtsGeneratedAudio>? prefetchTask = null;
         try
         {
             var speed = MapRateToSpeed(selectedRate);
-            generatedAudio = await Task.Run(() => engine.Generate(text, speed, definition.SpeakerId), CancellationToken.None);
+            prefetchTask = Task.Run(() => engine.Generate(text, speed, definition.SpeakerId), CancellationToken.None);
+            await _mutex.WaitAsync(cancellationToken);
+            try
+            {
+                _activePrefetchTask = prefetchTask;
+            }
+            finally
+            {
+                _mutex.Release();
+            }
+
+            generatedAudio = await prefetchTask;
             var audioBytes = ConvertSamplesToBytes(generatedAudio.Samples);
 
             await _mutex.WaitAsync(cancellationToken);
@@ -191,6 +205,19 @@ public sealed class SherpaOnnxSpeechService : ITextToSpeechService
         }
         finally
         {
+            await _mutex.WaitAsync(CancellationToken.None);
+            try
+            {
+                if (ReferenceEquals(_activePrefetchTask, prefetchTask))
+                {
+                    _activePrefetchTask = null;
+                }
+            }
+            finally
+            {
+                _mutex.Release();
+            }
+
             generatedAudio?.Dispose();
             prefetchCts.Dispose();
         }
@@ -243,10 +270,22 @@ public sealed class SherpaOnnxSpeechService : ITextToSpeechService
         }
 
         OfflineTtsGeneratedAudio? generatedAudio = null;
+        Task<OfflineTtsGeneratedAudio>? generationTask = null;
         try
         {
             var speed = MapRateToSpeed(selectedRate);
-            generatedAudio = await Task.Run(() => engine.Generate(text, speed, definition.SpeakerId), CancellationToken.None);
+            generationTask = Task.Run(() => engine.Generate(text, speed, definition.SpeakerId), CancellationToken.None);
+            await _mutex.WaitAsync(cancellationToken);
+            try
+            {
+                _activeGenerationTask = generationTask;
+            }
+            finally
+            {
+                _mutex.Release();
+            }
+
+            generatedAudio = await generationTask;
             var audioBytes = ConvertSamplesToBytes(generatedAudio.Samples);
 
             await _mutex.WaitAsync(cancellationToken);
@@ -287,6 +326,19 @@ public sealed class SherpaOnnxSpeechService : ITextToSpeechService
         }
         finally
         {
+            await _mutex.WaitAsync(CancellationToken.None);
+            try
+            {
+                if (ReferenceEquals(_activeGenerationTask, generationTask))
+                {
+                    _activeGenerationTask = null;
+                }
+            }
+            finally
+            {
+                _mutex.Release();
+            }
+
             generatedAudio?.Dispose();
             generationCts.Dispose();
         }
@@ -360,6 +412,7 @@ public sealed class SherpaOnnxSpeechService : ITextToSpeechService
         CancelGenerationCore();
         CancelPrefetchCore();
         StopPlaybackCore();
+        WaitForBackgroundWork();
 
         foreach (var engine in _engineCache.Values)
         {
@@ -368,6 +421,38 @@ public sealed class SherpaOnnxSpeechService : ITextToSpeechService
 
         _engineCache.Clear();
         _mutex.Dispose();
+    }
+
+    private void WaitForBackgroundWork()
+    {
+        Task?[] tasks;
+
+        try
+        {
+            _mutex.Wait();
+            tasks = new[] { _activeGenerationTask, _activePrefetchTask };
+        }
+        finally
+        {
+            if (_mutex.CurrentCount == 0)
+            {
+                _mutex.Release();
+            }
+        }
+
+        var pendingTasks = tasks.Where(task => task is not null).Cast<Task>().ToArray();
+        if (pendingTasks.Length == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            Task.WhenAll(pendingTasks).GetAwaiter().GetResult();
+        }
+        catch
+        {
+        }
     }
 
     private OfflineTts GetOrCreateEngineCore(SherpaVoiceDefinition definition)

@@ -2,6 +2,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
+using StoryLight.App.Models;
 using StoryLight.App.ViewModels;
 
 namespace StoryLight.App.Views;
@@ -75,6 +76,53 @@ public sealed partial class MainWindow : Window
             viewModel.OpenSelectedCommand.Execute(null);
             e.Handled = true;
         }
+    }
+
+    private void OnLibraryItemPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (sender is not Control control
+            || DataContext is not MainWindowViewModel viewModel
+            || control.DataContext is not LibraryItem item)
+        {
+            return;
+        }
+
+        viewModel.SelectLibraryItem(item);
+
+        if (!e.GetCurrentPoint(control).Properties.IsRightButtonPressed)
+        {
+            return;
+        }
+
+        var contextMenu = BuildLibraryItemContextMenu(viewModel);
+        control.ContextMenu = contextMenu;
+        contextMenu.Open(control);
+        e.Handled = true;
+    }
+
+    private static ContextMenu BuildLibraryItemContextMenu(MainWindowViewModel viewModel)
+    {
+        return new ContextMenu
+        {
+            Items =
+            {
+                new MenuItem
+                {
+                    Header = "Open",
+                    Command = viewModel.OpenSelectedCommand
+                },
+                new MenuItem
+                {
+                    Header = "Remove",
+                    Command = viewModel.RemoveSelectedCommand
+                },
+                new MenuItem
+                {
+                    Header = "Delete EPUB",
+                    Command = viewModel.DeleteSavedEpubCommand
+                }
+            }
+        };
     }
 
     private void InitializeComponent()

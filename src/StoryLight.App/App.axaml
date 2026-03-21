@@ -17,5 +17,21 @@
     <Style Selector="Button.toolbar">
       <Setter Property="MinWidth" Value="80" />
     </Style>
+    <Style Selector="Button.icon">
+      <Setter Property="MinWidth" Value="40" />
+      <Setter Property="MinHeight" Value="40" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="FontSize" Value="18" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Button.edgeTab">
+      <Setter Property="MinWidth" Value="28" />
+      <Setter Property="MinHeight" Value="120" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="FontSize" Value="18" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
   </Application.Styles>
 </Application>

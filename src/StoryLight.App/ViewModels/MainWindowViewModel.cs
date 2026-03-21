@@ -32,6 +32,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     private int _speechRate;
     private int? _activeSpeechPageIndex;
     private bool _isBusy;
+    private bool _isLibraryCollapsed;
+    private bool _isReaderOptionsOpen;
     private bool _isUpdatingSpeechSelection;
     private bool _continueToNextPage;
     private TtsVoiceInfo? _selectedTtsVoice;
@@ -50,11 +52,13 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         OpenSelectedCommand = new RelayCommand(async () => await OpenSelectedAsync(), () => !IsBusy && SelectedLibraryItem is not null);
         RemoveSelectedCommand = new RelayCommand(RemoveSelected, () => !IsBusy && SelectedLibraryItem is not null);
         DeleteSavedEpubCommand = new RelayCommand(DeleteSavedEpub, CanDeleteSelectedEpub);
+        ToggleLibraryPaneCommand = new RelayCommand(() => IsLibraryCollapsed = !IsLibraryCollapsed);
+        ToggleReaderOptionsCommand = new RelayCommand(() => IsReaderOptionsOpen = !IsReaderOptionsOpen);
         OpenVoicesFolderCommand = new RelayCommand(OpenVoicesFolder, () => !IsBusy && OperatingSystem.IsWindows());
         PreviousPageCommand = new RelayCommand(() => ChangePage(-1), () => CurrentPageIndex > 0);
         NextPageCommand = new RelayCommand(() => ChangePage(1), () => CurrentPageIndex < PageCount - 1);
-        ZoomInCommand = new RelayCommand(() => ChangeZoom(0.1), () => ZoomLevel < 2.0);
-        ZoomOutCommand = new RelayCommand(() => ChangeZoom(-0.1), () => ZoomLevel > 0.7);
+        ZoomInCommand = new RelayCommand(() => ChangeZoom(0.1), () => ZoomLevel < 5.0);
+        ZoomOutCommand = new RelayCommand(() => ChangeZoom(-0.1), () => ZoomLevel > 0.25);
         ReadAloudCommand = new RelayCommand(async () => await ReadCurrentPageAsync(), () => !IsBusy && _pages.Count > 0 && _textToSpeechService.IsAvailable);
         PauseSpeechCommand = new RelayCommand(async () => await PauseSpeechAsync(), () => _textToSpeechService.IsAvailable && _textToSpeechService.IsSpeaking && !_textToSpeechService.IsPaused);
         ResumeSpeechCommand = new RelayCommand(async () => await ResumeSpeechAsync(), () => _textToSpeechService.IsAvailable && _textToSpeechService.IsPaused);
@@ -122,11 +126,12 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         get => _zoomLevel;
         set
         {
-            var clamped = Math.Clamp(Math.Round(value, 1), 0.7, 2.0);
+            var clamped = ClampZoom(value);
             if (SetProperty(ref _zoomLevel, clamped))
             {
                 RaisePropertyChanged(nameof(ReaderFontSize));
                 RaisePropertyChanged(nameof(ZoomDisplay));
+                RaisePropertyChanged(nameof(ZoomPercent));
                 RepaginateCurrentDocument();
                 RefreshCommandStates();
             }
@@ -136,6 +141,12 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     public double ReaderFontSize => 18 * ZoomLevel;
 
     public string ZoomDisplay => $"{ZoomLevel:P0}";
+
+    public double ZoomPercent
+    {
+        get => Math.Round(ZoomLevel * 100);
+        set => ZoomLevel = value / 100d;
+    }
 
     public int CurrentPageIndex
     {
@@ -191,6 +202,28 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         }
     }
 
+    public bool IsLibraryCollapsed
+    {
+        get => _isLibraryCollapsed;
+        set
+        {
+            if (SetProperty(ref _isLibraryCollapsed, value))
+            {
+                RaisePropertyChanged(nameof(IsLibraryVisible));
+                _appState.IsLibraryCollapsed = value;
+                _ = PersistStateAsync();
+            }
+        }
+    }
+
+    public bool IsLibraryVisible => !IsLibraryCollapsed;
+
+    public bool IsReaderOptionsOpen
+    {
+        get => _isReaderOptionsOpen;
+        set => SetProperty(ref _isReaderOptionsOpen, value);
+    }
+
     public TtsVoiceInfo? SelectedTtsVoice
     {
         get => _selectedTtsVoice;
@@ -219,6 +252,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     public RelayCommand OpenSelectedCommand { get; }
     public RelayCommand RemoveSelectedCommand { get; }
     public RelayCommand DeleteSavedEpubCommand { get; }
+    public RelayCommand ToggleLibraryPaneCommand { get; }
+    public RelayCommand ToggleReaderOptionsCommand { get; }
     public RelayCommand OpenVoicesFolderCommand { get; }
     public RelayCommand PreviousPageCommand { get; }
     public RelayCommand NextPageCommand { get; }
@@ -237,6 +272,11 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
     public void HandleZoomOutShortcut() => ChangeZoom(-0.1);
 
+    public void SelectLibraryItem(LibraryItem? item)
+    {
+        SelectedLibraryItem = item;
+    }
+
     public void HandleWindowActivated()
     {
         _ = RefreshTtsOptionsAsync(updateStatus: false, persistState: false);
@@ -254,6 +294,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         {
             var state = await _stateStore.LoadAsync();
             _appState.DefaultZoomLevel = state.DefaultZoomLevel;
+            _appState.IsLibraryCollapsed = state.IsLibraryCollapsed;
             _appState.Library = state.Library;
             _appState.ReadingPositions = state.ReadingPositions;
             _appState.Speech = state.Speech ?? new SpeechSettings();
@@ -264,6 +305,9 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
                 LibraryItems.Add(item);
             }
 
+            _isLibraryCollapsed = _appState.IsLibraryCollapsed;
+            RaisePropertyChanged(nameof(IsLibraryCollapsed));
+            RaisePropertyChanged(nameof(IsLibraryVisible));
             ZoomLevel = _appState.DefaultZoomLevel <= 0 ? 1.0 : _appState.DefaultZoomLevel;
             _speechRate = _appState.Speech.Rate;
             _continueToNextPage = _appState.Speech.ContinueToNextPage;
@@ -329,10 +373,11 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             var savedPosition = _appState.ReadingPositions.FirstOrDefault(position => position.DocumentId == item.Id);
             if (savedPosition is not null && savedPosition.ZoomLevel > 0)
             {
-                _zoomLevel = savedPosition.ZoomLevel;
+                _zoomLevel = ClampZoom(savedPosition.ZoomLevel);
                 RaisePropertyChanged(nameof(ZoomLevel));
                 RaisePropertyChanged(nameof(ReaderFontSize));
                 RaisePropertyChanged(nameof(ZoomDisplay));
+                RaisePropertyChanged(nameof(ZoomPercent));
             }
 
             BuildPages(document, savedPosition?.PageIndex ?? 0);
@@ -477,7 +522,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
     private void ChangeZoom(double delta)
     {
-        ZoomLevel = Math.Clamp(Math.Round(ZoomLevel + delta, 1), 0.7, 2.0);
+        ZoomLevel = ClampZoom(ZoomLevel + delta);
     }
 
     private void RepaginateCurrentDocument()
@@ -689,6 +734,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     private async Task PersistStateAsync()
     {
         _appState.DefaultZoomLevel = ZoomLevel;
+        _appState.IsLibraryCollapsed = IsLibraryCollapsed;
 
         if (SelectedLibraryItem is not null)
         {
@@ -757,6 +803,11 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         }
 
         return (CurrentPageIndex + 1d) / _pages.Count;
+    }
+
+    private static double ClampZoom(double value)
+    {
+        return Math.Clamp(Math.Round(value, 2), 0.25, 5.0);
     }
 
     private int GetCharactersPerPage(DocumentFormat format)
@@ -858,6 +909,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         OpenSelectedCommand.RaiseCanExecuteChanged();
         RemoveSelectedCommand.RaiseCanExecuteChanged();
         DeleteSavedEpubCommand.RaiseCanExecuteChanged();
+        ToggleLibraryPaneCommand.RaiseCanExecuteChanged();
+        ToggleReaderOptionsCommand.RaiseCanExecuteChanged();
         OpenVoicesFolderCommand.RaiseCanExecuteChanged();
         PreviousPageCommand.RaiseCanExecuteChanged();
         NextPageCommand.RaiseCanExecuteChanged();

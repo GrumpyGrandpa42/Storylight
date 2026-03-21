@@ -1,7 +1,7 @@
 {
   "version": 3,
   "targets": {
-    "net8.0": {
+    "net8.0-windows10.0.19041": {
       "Avalonia/11.0.10": {
         "type": "package",
         "dependencies": {
@@ -355,6 +355,278 @@
           "lib/net5.0/MicroCom.Runtime.dll": {}
         }
       },
+      "Microsoft.NETCore.Platforms/3.1.0": {
+        "type": "package",
+        "compile": {
+          "lib/netstandard1.0/_._": {}
+        },
+        "runtime": {
+          "lib/netstandard1.0/_._": {}
+        }
+      },
+      "Microsoft.Win32.Registry/4.7.0": {
+        "type": "package",
+        "dependencies": {
+          "System.Security.AccessControl": "4.7.0",
+          "System.Security.Principal.Windows": "4.7.0"
+        },
+        "compile": {
+          "ref/netstandard2.0/Microsoft.Win32.Registry.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/netstandard2.0/Microsoft.Win32.Registry.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtimeTargets": {
+          "runtimes/unix/lib/netstandard2.0/Microsoft.Win32.Registry.dll": {
+            "assetType": "runtime",
+            "rid": "unix"
+          },
+          "runtimes/win/lib/netstandard2.0/Microsoft.Win32.Registry.dll": {
+            "assetType": "runtime",
+            "rid": "win"
+          }
+        }
+      },
+      "NAudio/2.2.1": {
+        "type": "package",
+        "dependencies": {
+          "NAudio.Asio": "2.2.1",
+          "NAudio.Core": "2.2.1",
+          "NAudio.Midi": "2.2.1",
+          "NAudio.Wasapi": "2.2.1",
+          "NAudio.WinForms": "2.2.1",
+          "NAudio.WinMM": "2.2.1"
+        },
+        "compile": {
+          "lib/net6.0-windows7.0/NAudio.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/net6.0-windows7.0/NAudio.dll": {
+            "related": ".xml"
+          }
+        }
+      },
+      "NAudio.Asio/2.2.1": {
+        "type": "package",
+        "dependencies": {
+          "Microsoft.Win32.Registry": "4.7.0",
+          "NAudio.Core": "2.2.1"
+        },
+        "compile": {
+          "lib/netstandard2.0/NAudio.Asio.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/netstandard2.0/NAudio.Asio.dll": {
+            "related": ".xml"
+          }
+        }
+      },
+      "NAudio.Core/2.2.1": {
+        "type": "package",
+        "compile": {
+          "lib/netstandard2.0/NAudio.Core.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/netstandard2.0/NAudio.Core.dll": {
+            "related": ".xml"
+          }
+        }
+      },
+      "NAudio.Midi/2.2.1": {
+        "type": "package",
+        "dependencies": {
+          "NAudio.Core": "2.2.1"
+        },
+        "compile": {
+          "lib/netstandard2.0/NAudio.Midi.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/netstandard2.0/NAudio.Midi.dll": {
+            "related": ".xml"
+          }
+        }
+      },
+      "NAudio.Wasapi/2.2.1": {
+        "type": "package",
+        "dependencies": {
+          "NAudio.Core": "2.2.1"
+        },
+        "compile": {
+          "lib/netstandard2.0/NAudio.Wasapi.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/netstandard2.0/NAudio.Wasapi.dll": {
+            "related": ".xml"
+          }
+        }
+      },
+      "NAudio.WinForms/2.2.1": {
+        "type": "package",
+        "dependencies": {
+          "NAudio.WinMM": "2.2.1"
+        },
+        "compile": {
+          "lib/netcoreapp3.1/NAudio.WinForms.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/netcoreapp3.1/NAudio.WinForms.dll": {
+            "related": ".xml"
+          }
+        },
+        "frameworkReferences": [
+          "Microsoft.WindowsDesktop.App.WindowsForms"
+        ]
+      },
+      "NAudio.WinMM/2.2.1": {
+        "type": "package",
+        "dependencies": {
+          "Microsoft.Win32.Registry": "4.7.0",
+          "NAudio.Core": "2.2.1"
+        },
+        "compile": {
+          "lib/netstandard2.0/NAudio.WinMM.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/netstandard2.0/NAudio.WinMM.dll": {
+            "related": ".xml"
+          }
+        }
+      },
+      "org.k2fsa.sherpa.onnx/1.12.28": {
+        "type": "package",
+        "dependencies": {
+          "org.k2fsa.sherpa.onnx.runtime.linux-arm64": "1.12.28",
+          "org.k2fsa.sherpa.onnx.runtime.linux-x64": "1.12.28",
+          "org.k2fsa.sherpa.onnx.runtime.osx-arm64": "1.12.28",
+          "org.k2fsa.sherpa.onnx.runtime.osx-x64": "1.12.28",
+          "org.k2fsa.sherpa.onnx.runtime.win-arm64": "1.12.28",
+          "org.k2fsa.sherpa.onnx.runtime.win-x64": "1.12.28",
+          "org.k2fsa.sherpa.onnx.runtime.win-x86": "1.12.28"
+        },
+        "compile": {
+          "lib/net8.0/sherpa-onnx.dll": {}
+        },
+        "runtime": {
+          "lib/net8.0/sherpa-onnx.dll": {}
+        }
+      },
+      "org.k2fsa.sherpa.onnx.runtime.linux-arm64/1.12.28": {
+        "type": "package",
+        "runtimeTargets": {
+          "runtimes/linux-arm64/native/libonnxruntime.so": {
+            "assetType": "native",
+            "rid": "linux-arm64"
+          },
+          "runtimes/linux-arm64/native/libsherpa-onnx-c-api.so": {
+            "assetType": "native",
+            "rid": "linux-arm64"
+          }
+        }
+      },
+      "org.k2fsa.sherpa.onnx.runtime.linux-x64/1.12.28": {
+        "type": "package",
+        "runtimeTargets": {
+          "runtimes/linux-x64/native/libonnxruntime.so": {
+            "assetType": "native",
+            "rid": "linux-x64"
+          },
+          "runtimes/linux-x64/native/libsherpa-onnx-c-api.so": {
+            "assetType": "native",
+            "rid": "linux-x64"
+          }
+        }
+      },
+      "org.k2fsa.sherpa.onnx.runtime.osx-arm64/1.12.28": {
+        "type": "package",
+        "runtimeTargets": {
+          "runtimes/osx-arm64/native/libonnxruntime.1.23.2.dylib": {
+            "assetType": "native",
+            "rid": "osx-arm64"
+          },
+          "runtimes/osx-arm64/native/libonnxruntime.dylib": {
+            "assetType": "native",
+            "rid": "osx-arm64"
+          },
+          "runtimes/osx-arm64/native/libsherpa-onnx-c-api.dylib": {
+            "assetType": "native",
+            "rid": "osx-arm64"
+          }
+        }
+      },
+      "org.k2fsa.sherpa.onnx.runtime.osx-x64/1.12.28": {
+        "type": "package",
+        "runtimeTargets": {
+          "runtimes/osx-x64/native/libonnxruntime.1.23.2.dylib": {
+            "assetType": "native",
+            "rid": "osx-x64"
+          },
+          "runtimes/osx-x64/native/libonnxruntime.dylib": {
+            "assetType": "native",
+            "rid": "osx-x64"
+          },
+          "runtimes/osx-x64/native/libsherpa-onnx-c-api.dylib": {
+            "assetType": "native",
+            "rid": "osx-x64"
+          }
+        }
+      },
+      "org.k2fsa.sherpa.onnx.runtime.win-arm64/1.12.28": {
+        "type": "package",
+        "runtimeTargets": {
+          "runtimes/win-arm64/native/onnxruntime.dll": {
+            "assetType": "native",
+            "rid": "win-arm64"
+          },
+          "runtimes/win-arm64/native/sherpa-onnx-c-api.dll": {
+            "assetType": "native",
+            "rid": "win-arm64"
+          }
+        }
+      },
+      "org.k2fsa.sherpa.onnx.runtime.win-x64/1.12.28": {
+        "type": "package",
+        "runtimeTargets": {
+          "runtimes/win-x64/native/onnxruntime.dll": {
+            "assetType": "native",
+            "rid": "win-x64"
+          },
+          "runtimes/win-x64/native/sherpa-onnx-c-api.dll": {
+            "assetType": "native",
+            "rid": "win-x64"
+          }
+        }
+      },
+      "org.k2fsa.sherpa.onnx.runtime.win-x86/1.12.28": {
+        "type": "package",
+        "runtimeTargets": {
+          "runtimes/win-x86/native/onnxruntime.dll": {
+            "assetType": "native",
+            "rid": "win-x86"
+          },
+          "runtimes/win-x86/native/sherpa-onnx-c-api.dll": {
+            "assetType": "native",
+            "rid": "win-x86"
+          }
+        }
+      },
       "SkiaSharp/2.88.7": {
         "type": "package",
         "dependencies": {
@@ -485,6 +757,52 @@
         },
         "runtime": {
           "lib/netcoreapp2.0/_._": {}
+        }
+      },
+      "System.Security.AccessControl/4.7.0": {
+        "type": "package",
+        "dependencies": {
+          "Microsoft.NETCore.Platforms": "3.1.0",
+          "System.Security.Principal.Windows": "4.7.0"
+        },
+        "compile": {
+          "ref/netstandard2.0/System.Security.AccessControl.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/netstandard2.0/System.Security.AccessControl.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtimeTargets": {
+          "runtimes/win/lib/netcoreapp2.0/System.Security.AccessControl.dll": {
+            "assetType": "runtime",
+            "rid": "win"
+          }
+        }
+      },
+      "System.Security.Principal.Windows/4.7.0": {
+        "type": "package",
+        "compile": {
+          "ref/netcoreapp3.0/System.Security.Principal.Windows.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/netstandard2.0/System.Security.Principal.Windows.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtimeTargets": {
+          "runtimes/unix/lib/netcoreapp2.1/System.Security.Principal.Windows.dll": {
+            "assetType": "runtime",
+            "rid": "unix"
+          },
+          "runtimes/win/lib/netcoreapp2.1/System.Security.Principal.Windows.dll": {
+            "assetType": "runtime",
+            "rid": "win"
+          }
         }
       },
       "Tmds.DBus.Protocol/0.15.0": {
@@ -1130,6 +1448,300 @@
         "microcom.runtime.nuspec"
       ]
     },
+    "Microsoft.NETCore.Platforms/3.1.0": {
+      "sha512": "z7aeg8oHln2CuNulfhiLYxCVMPEwBl3rzicjvIX+4sUuCwvXw5oXQEtbiU2c0z4qYL5L3Kmx0mMA/+t/SbY67w==",
+      "type": "package",
+      "path": "microsoft.netcore.platforms/3.1.0",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "LICENSE.TXT",
+        "THIRD-PARTY-NOTICES.TXT",
+        "lib/netstandard1.0/_._",
+        "microsoft.netcore.platforms.3.1.0.nupkg.sha512",
+        "microsoft.netcore.platforms.nuspec",
+        "runtime.json",
+        "useSharedDesignerContext.txt",
+        "version.txt"
+      ]
+    },
+    "Microsoft.Win32.Registry/4.7.0": {
+      "sha512": "KSrRMb5vNi0CWSGG1++id2ZOs/1QhRqROt+qgbEAdQuGjGrFcl4AOl4/exGPUYz2wUnU42nvJqon1T3U0kPXLA==",
+      "type": "package",
+      "path": "microsoft.win32.registry/4.7.0",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "LICENSE.TXT",
+        "THIRD-PARTY-NOTICES.TXT",
+        "lib/net46/Microsoft.Win32.Registry.dll",
+        "lib/net461/Microsoft.Win32.Registry.dll",
+        "lib/net461/Microsoft.Win32.Registry.xml",
+        "lib/netstandard1.3/Microsoft.Win32.Registry.dll",
+        "lib/netstandard2.0/Microsoft.Win32.Registry.dll",
+        "lib/netstandard2.0/Microsoft.Win32.Registry.xml",
+        "microsoft.win32.registry.4.7.0.nupkg.sha512",
+        "microsoft.win32.registry.nuspec",
+        "ref/net46/Microsoft.Win32.Registry.dll",
+        "ref/net461/Microsoft.Win32.Registry.dll",
+        "ref/net461/Microsoft.Win32.Registry.xml",
+        "ref/net472/Microsoft.Win32.Registry.dll",
+        "ref/net472/Microsoft.Win32.Registry.xml",
+        "ref/netstandard1.3/Microsoft.Win32.Registry.dll",
+        "ref/netstandard1.3/Microsoft.Win32.Registry.xml",
+        "ref/netstandard1.3/de/Microsoft.Win32.Registry.xml",
+        "ref/netstandard1.3/es/Microsoft.Win32.Registry.xml",
+        "ref/netstandard1.3/fr/Microsoft.Win32.Registry.xml",
+        "ref/netstandard1.3/it/Microsoft.Win32.Registry.xml",
+        "ref/netstandard1.3/ja/Microsoft.Win32.Registry.xml",
+        "ref/netstandard1.3/ko/Microsoft.Win32.Registry.xml",
+        "ref/netstandard1.3/ru/Microsoft.Win32.Registry.xml",
+        "ref/netstandard1.3/zh-hans/Microsoft.Win32.Registry.xml",
+        "ref/netstandard1.3/zh-hant/Microsoft.Win32.Registry.xml",
+        "ref/netstandard2.0/Microsoft.Win32.Registry.dll",
+        "ref/netstandard2.0/Microsoft.Win32.Registry.xml",
+        "runtimes/unix/lib/netstandard2.0/Microsoft.Win32.Registry.dll",
+        "runtimes/unix/lib/netstandard2.0/Microsoft.Win32.Registry.xml",
+        "runtimes/win/lib/net46/Microsoft.Win32.Registry.dll",
+        "runtimes/win/lib/net461/Microsoft.Win32.Registry.dll",
+        "runtimes/win/lib/net461/Microsoft.Win32.Registry.xml",
+        "runtimes/win/lib/netstandard1.3/Microsoft.Win32.Registry.dll",
+        "runtimes/win/lib/netstandard2.0/Microsoft.Win32.Registry.dll",
+        "runtimes/win/lib/netstandard2.0/Microsoft.Win32.Registry.xml",
+        "useSharedDesignerContext.txt",
+        "version.txt"
+      ]
+    },
+    "NAudio/2.2.1": {
+      "sha512": "c0DzwiyyklM0TP39Y7RObwO3QkWecgM6H60ikiEnsV/aEAJPbj5MFCLaD8BSfKuZe0HGuh9GRGWWlJmSxDc9MA==",
+      "type": "package",
+      "path": "naudio/2.2.1",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "lib/net472/NAudio.dll",
+        "lib/net472/NAudio.xml",
+        "lib/net6.0-windows7.0/NAudio.dll",
+        "lib/net6.0-windows7.0/NAudio.xml",
+        "lib/net6.0/NAudio.dll",
+        "lib/net6.0/NAudio.xml",
+        "lib/netcoreapp3.1/NAudio.dll",
+        "lib/netcoreapp3.1/NAudio.xml",
+        "license.txt",
+        "naudio-icon.png",
+        "naudio.2.2.1.nupkg.sha512",
+        "naudio.nuspec"
+      ]
+    },
+    "NAudio.Asio/2.2.1": {
+      "sha512": "hQglyOT5iT3XuGpBP8ZG0+aoqwRfidHjTNehpoWwX0g6KJEgtH2VaqM2nuJ2mheKZa/IBqB4YQTZVvrIapzfOA==",
+      "type": "package",
+      "path": "naudio.asio/2.2.1",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "lib/netstandard2.0/NAudio.Asio.dll",
+        "lib/netstandard2.0/NAudio.Asio.xml",
+        "naudio-icon.png",
+        "naudio.asio.2.2.1.nupkg.sha512",
+        "naudio.asio.nuspec"
+      ]
+    },
+    "NAudio.Core/2.2.1": {
+      "sha512": "GgkdP6K/7FqXFo7uHvoqGZTJvW4z8g2IffhOO4JHaLzKCdDOUEzVKtveoZkCuUX8eV2HAINqi7VFqlFndrnz/g==",
+      "type": "package",
+      "path": "naudio.core/2.2.1",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "lib/netstandard2.0/NAudio.Core.dll",
+        "lib/netstandard2.0/NAudio.Core.xml",
+        "naudio-icon.png",
+        "naudio.core.2.2.1.nupkg.sha512",
+        "naudio.core.nuspec"
+      ]
+    },
+    "NAudio.Midi/2.2.1": {
+      "sha512": "6r23ylGo5aeP02WFXsPquz0T0hFJWyh+7t++tz19tc3Kr38NHm+Z9j+FiAv+xkH8tZqXJqus9Q8p6u7bidIgbw==",
+      "type": "package",
+      "path": "naudio.midi/2.2.1",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "lib/netstandard2.0/NAudio.Midi.dll",
+        "lib/netstandard2.0/NAudio.Midi.xml",
+        "naudio-icon.png",
+        "naudio.midi.2.2.1.nupkg.sha512",
+        "naudio.midi.nuspec"
+      ]
+    },
+    "NAudio.Wasapi/2.2.1": {
+      "sha512": "lFfXoqacZZe0WqNChJgGYI+XV/n/61LzPHT3C1CJp4khoxeo2sziyX5wzNYWeCMNbsWxFvT3b3iXeY1UYjBhZw==",
+      "type": "package",
+      "path": "naudio.wasapi/2.2.1",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "lib/netstandard2.0/NAudio.Wasapi.dll",
+        "lib/netstandard2.0/NAudio.Wasapi.xml",
+        "lib/uap10.0.18362/NAudio.Wasapi.dll",
+        "lib/uap10.0.18362/NAudio.Wasapi.pri",
+        "lib/uap10.0.18362/NAudio.Wasapi.xml",
+        "naudio-icon.png",
+        "naudio.wasapi.2.2.1.nupkg.sha512",
+        "naudio.wasapi.nuspec"
+      ]
+    },
+    "NAudio.WinForms/2.2.1": {
+      "sha512": "DlDkewY1myY0A+3NrYRJD+MZhZV0yy1mNF6dckB27IQ9XCs/My5Ip8BZcoSHOsaPSe2GAjvoaDnk6N9w8xTv7w==",
+      "type": "package",
+      "path": "naudio.winforms/2.2.1",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "lib/net472/NAudio.WinForms.dll",
+        "lib/net472/NAudio.WinForms.xml",
+        "lib/netcoreapp3.1/NAudio.WinForms.dll",
+        "lib/netcoreapp3.1/NAudio.WinForms.xml",
+        "naudio-icon.png",
+        "naudio.winforms.2.2.1.nupkg.sha512",
+        "naudio.winforms.nuspec"
+      ]
+    },
+    "NAudio.WinMM/2.2.1": {
+      "sha512": "xFHRFwH4x6aq3IxRbewvO33ugJRvZFEOfO62i7uQJRUNW2cnu6BeBTHUS0JD5KBucZbHZaYqxQG8dwZ47ezQuQ==",
+      "type": "package",
+      "path": "naudio.winmm/2.2.1",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "lib/netstandard2.0/NAudio.WinMM.dll",
+        "lib/netstandard2.0/NAudio.WinMM.xml",
+        "naudio-icon.png",
+        "naudio.winmm.2.2.1.nupkg.sha512",
+        "naudio.winmm.nuspec"
+      ]
+    },
+    "org.k2fsa.sherpa.onnx/1.12.28": {
+      "sha512": "+qR2G4fsTY/RUVcLRi/7HiTbjN81/gmQt7vtOPT0qQE7+gz8Qr5QphQ+sSM2NwN18flDj+ZMAIxQS2ZP5D3j8Q==",
+      "type": "package",
+      "path": "org.k2fsa.sherpa.onnx/1.12.28",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "README.md",
+        "lib/net20/sherpa-onnx.dll",
+        "lib/net35/sherpa-onnx.dll",
+        "lib/net40/sherpa-onnx.dll",
+        "lib/net45/sherpa-onnx.dll",
+        "lib/net6.0/sherpa-onnx.dll",
+        "lib/net7.0/sherpa-onnx.dll",
+        "lib/net8.0/sherpa-onnx.dll",
+        "lib/netstandard2.0/sherpa-onnx.dll",
+        "org.k2fsa.sherpa.onnx.1.12.28.nupkg.sha512",
+        "org.k2fsa.sherpa.onnx.nuspec"
+      ]
+    },
+    "org.k2fsa.sherpa.onnx.runtime.linux-arm64/1.12.28": {
+      "sha512": "Urpb4LTavypOeQRl5oaOkZCcQU3O1VVhFW+ZT677aAoqSyOzhOR7mwqvOph3K/xDjoLnGGFupI/e9L0IUNgS3A==",
+      "type": "package",
+      "path": "org.k2fsa.sherpa.onnx.runtime.linux-arm64/1.12.28",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "README.md",
+        "org.k2fsa.sherpa.onnx.runtime.linux-arm64.1.12.28.nupkg.sha512",
+        "org.k2fsa.sherpa.onnx.runtime.linux-arm64.nuspec",
+        "runtimes/linux-arm64/native/libonnxruntime.so",
+        "runtimes/linux-arm64/native/libsherpa-onnx-c-api.so"
+      ]
+    },
+    "org.k2fsa.sherpa.onnx.runtime.linux-x64/1.12.28": {
+      "sha512": "AxNWy1Eh2J82IfIvO2j7IvYyp59Cg2OueuoUTN6/H2KfbJz/BuoU7uvkcX5/umqdGlvrT+bYUot/iyDp13GjCg==",
+      "type": "package",
+      "path": "org.k2fsa.sherpa.onnx.runtime.linux-x64/1.12.28",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "README.md",
+        "org.k2fsa.sherpa.onnx.runtime.linux-x64.1.12.28.nupkg.sha512",
+        "org.k2fsa.sherpa.onnx.runtime.linux-x64.nuspec",
+        "runtimes/linux-x64/native/libonnxruntime.so",
+        "runtimes/linux-x64/native/libsherpa-onnx-c-api.so"
+      ]
+    },
+    "org.k2fsa.sherpa.onnx.runtime.osx-arm64/1.12.28": {
+      "sha512": "LTCl85oHn5u1pLnbah+vmJ7BKOe79qvc4SrseLXbj4E/v4wKRaImUoBUqCM+bjDUNOco8f+QC3dqtGhdf6zd2Q==",
+      "type": "package",
+      "path": "org.k2fsa.sherpa.onnx.runtime.osx-arm64/1.12.28",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "README.md",
+        "org.k2fsa.sherpa.onnx.runtime.osx-arm64.1.12.28.nupkg.sha512",
+        "org.k2fsa.sherpa.onnx.runtime.osx-arm64.nuspec",
+        "runtimes/osx-arm64/native/libonnxruntime.1.23.2.dylib",
+        "runtimes/osx-arm64/native/libonnxruntime.dylib",
+        "runtimes/osx-arm64/native/libsherpa-onnx-c-api.dylib"
+      ]
+    },
+    "org.k2fsa.sherpa.onnx.runtime.osx-x64/1.12.28": {
+      "sha512": "PTKCkNSYLuRf7JHtLrBxDwWf6ygShH8HNatQQ6ba3IjsDSBYfjz/pCQ3RqP3qXp9gGa63BpTsOolqbXNacmJtQ==",
+      "type": "package",
+      "path": "org.k2fsa.sherpa.onnx.runtime.osx-x64/1.12.28",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "README.md",
+        "org.k2fsa.sherpa.onnx.runtime.osx-x64.1.12.28.nupkg.sha512",
+        "org.k2fsa.sherpa.onnx.runtime.osx-x64.nuspec",
+        "runtimes/osx-x64/native/libonnxruntime.1.23.2.dylib",
+        "runtimes/osx-x64/native/libonnxruntime.dylib",
+        "runtimes/osx-x64/native/libsherpa-onnx-c-api.dylib"
+      ]
+    },
+    "org.k2fsa.sherpa.onnx.runtime.win-arm64/1.12.28": {
+      "sha512": "EKZn9NIP57XnCLMF6gODSVApgOBpp+7VgqkkqFkbGqq9x+YK6prw5h4NcosWNBxsujeDDATx1jmWNpBOQutxcQ==",
+      "type": "package",
+      "path": "org.k2fsa.sherpa.onnx.runtime.win-arm64/1.12.28",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "README.md",
+        "org.k2fsa.sherpa.onnx.runtime.win-arm64.1.12.28.nupkg.sha512",
+        "org.k2fsa.sherpa.onnx.runtime.win-arm64.nuspec",
+        "runtimes/win-arm64/native/onnxruntime.dll",
+        "runtimes/win-arm64/native/sherpa-onnx-c-api.dll"
+      ]
+    },
+    "org.k2fsa.sherpa.onnx.runtime.win-x64/1.12.28": {
+      "sha512": "FNO4iywgZNmPqxcr8JmotT43u3qGF4TszZHhotyEdxfGApPSo0hFIFPQG/mFUI5PNLXLtOAWweyQRhVtzKmYKw==",
+      "type": "package",
+      "path": "org.k2fsa.sherpa.onnx.runtime.win-x64/1.12.28",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "README.md",
+        "org.k2fsa.sherpa.onnx.runtime.win-x64.1.12.28.nupkg.sha512",
+        "org.k2fsa.sherpa.onnx.runtime.win-x64.nuspec",
+        "runtimes/win-x64/native/onnxruntime.dll",
+        "runtimes/win-x64/native/sherpa-onnx-c-api.dll"
+      ]
+    },
+    "org.k2fsa.sherpa.onnx.runtime.win-x86/1.12.28": {
+      "sha512": "UXV4BQO+6nPWM2Ry9iQRijuBa/4Fy5V9cbN8bJwtpU3okpQjAV/uL12PAaWwraOWw8DcgsHm1JcNgLljIDMbCg==",
+      "type": "package",
+      "path": "org.k2fsa.sherpa.onnx.runtime.win-x86/1.12.28",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "README.md",
+        "org.k2fsa.sherpa.onnx.runtime.win-x86.1.12.28.nupkg.sha512",
+        "org.k2fsa.sherpa.onnx.runtime.win-x86.nuspec",
+        "runtimes/win-x86/native/onnxruntime.dll",
+        "runtimes/win-x86/native/sherpa-onnx-c-api.dll"
+      ]
+    },
     "SkiaSharp/2.88.7": {
       "sha512": "LJHAMrbWO00J7jXWLWehyjqFo29T4VzABimfJb4nICqpEe3c/KvQGWL4ItON8ymzhxYOeFgyxeRzuNzO4GHSug==",
       "type": "package",
@@ -1465,6 +2077,106 @@
         "version.txt"
       ]
     },
+    "System.Security.AccessControl/4.7.0": {
+      "sha512": "JECvTt5aFF3WT3gHpfofL2MNNP6v84sxtXxpqhLBCcDRzqsPBmHhQ6shv4DwwN2tRlzsUxtb3G9M3763rbXKDg==",
+      "type": "package",
+      "path": "system.security.accesscontrol/4.7.0",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "LICENSE.TXT",
+        "THIRD-PARTY-NOTICES.TXT",
+        "lib/net46/System.Security.AccessControl.dll",
+        "lib/net461/System.Security.AccessControl.dll",
+        "lib/net461/System.Security.AccessControl.xml",
+        "lib/netstandard1.3/System.Security.AccessControl.dll",
+        "lib/netstandard2.0/System.Security.AccessControl.dll",
+        "lib/netstandard2.0/System.Security.AccessControl.xml",
+        "lib/uap10.0.16299/_._",
+        "ref/net46/System.Security.AccessControl.dll",
+        "ref/net461/System.Security.AccessControl.dll",
+        "ref/net461/System.Security.AccessControl.xml",
+        "ref/netstandard1.3/System.Security.AccessControl.dll",
+        "ref/netstandard1.3/System.Security.AccessControl.xml",
+        "ref/netstandard1.3/de/System.Security.AccessControl.xml",
+        "ref/netstandard1.3/es/System.Security.AccessControl.xml",
+        "ref/netstandard1.3/fr/System.Security.AccessControl.xml",
+        "ref/netstandard1.3/it/System.Security.AccessControl.xml",
+        "ref/netstandard1.3/ja/System.Security.AccessControl.xml",
+        "ref/netstandard1.3/ko/System.Security.AccessControl.xml",
+        "ref/netstandard1.3/ru/System.Security.AccessControl.xml",
+        "ref/netstandard1.3/zh-hans/System.Security.AccessControl.xml",
+        "ref/netstandard1.3/zh-hant/System.Security.AccessControl.xml",
+        "ref/netstandard2.0/System.Security.AccessControl.dll",
+        "ref/netstandard2.0/System.Security.AccessControl.xml",
+        "ref/uap10.0.16299/_._",
+        "runtimes/win/lib/net46/System.Security.AccessControl.dll",
+        "runtimes/win/lib/net461/System.Security.AccessControl.dll",
+        "runtimes/win/lib/net461/System.Security.AccessControl.xml",
+        "runtimes/win/lib/netcoreapp2.0/System.Security.AccessControl.dll",
+        "runtimes/win/lib/netcoreapp2.0/System.Security.AccessControl.xml",
+        "runtimes/win/lib/netstandard1.3/System.Security.AccessControl.dll",
+        "runtimes/win/lib/uap10.0.16299/_._",
+        "system.security.accesscontrol.4.7.0.nupkg.sha512",
+        "system.security.accesscontrol.nuspec",
+        "useSharedDesignerContext.txt",
+        "version.txt"
+      ]
+    },
+    "System.Security.Principal.Windows/4.7.0": {
+      "sha512": "ojD0PX0XhneCsUbAZVKdb7h/70vyYMDYs85lwEI+LngEONe/17A0cFaRFqZU+sOEidcVswYWikYOQ9PPfjlbtQ==",
+      "type": "package",
+      "path": "system.security.principal.windows/4.7.0",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "LICENSE.TXT",
+        "THIRD-PARTY-NOTICES.TXT",
+        "lib/net46/System.Security.Principal.Windows.dll",
+        "lib/net461/System.Security.Principal.Windows.dll",
+        "lib/net461/System.Security.Principal.Windows.xml",
+        "lib/netstandard1.3/System.Security.Principal.Windows.dll",
+        "lib/netstandard2.0/System.Security.Principal.Windows.dll",
+        "lib/netstandard2.0/System.Security.Principal.Windows.xml",
+        "lib/uap10.0.16299/_._",
+        "ref/net46/System.Security.Principal.Windows.dll",
+        "ref/net461/System.Security.Principal.Windows.dll",
+        "ref/net461/System.Security.Principal.Windows.xml",
+        "ref/netcoreapp3.0/System.Security.Principal.Windows.dll",
+        "ref/netcoreapp3.0/System.Security.Principal.Windows.xml",
+        "ref/netstandard1.3/System.Security.Principal.Windows.dll",
+        "ref/netstandard1.3/System.Security.Principal.Windows.xml",
+        "ref/netstandard1.3/de/System.Security.Principal.Windows.xml",
+        "ref/netstandard1.3/es/System.Security.Principal.Windows.xml",
+        "ref/netstandard1.3/fr/System.Security.Principal.Windows.xml",
+        "ref/netstandard1.3/it/System.Security.Principal.Windows.xml",
+        "ref/netstandard1.3/ja/System.Security.Principal.Windows.xml",
+        "ref/netstandard1.3/ko/System.Security.Principal.Windows.xml",
+        "ref/netstandard1.3/ru/System.Security.Principal.Windows.xml",
+        "ref/netstandard1.3/zh-hans/System.Security.Principal.Windows.xml",
+        "ref/netstandard1.3/zh-hant/System.Security.Principal.Windows.xml",
+        "ref/netstandard2.0/System.Security.Principal.Windows.dll",
+        "ref/netstandard2.0/System.Security.Principal.Windows.xml",
+        "ref/uap10.0.16299/_._",
+        "runtimes/unix/lib/netcoreapp2.0/System.Security.Principal.Windows.dll",
+        "runtimes/unix/lib/netcoreapp2.0/System.Security.Principal.Windows.xml",
+        "runtimes/unix/lib/netcoreapp2.1/System.Security.Principal.Windows.dll",
+        "runtimes/unix/lib/netcoreapp2.1/System.Security.Principal.Windows.xml",
+        "runtimes/win/lib/net46/System.Security.Principal.Windows.dll",
+        "runtimes/win/lib/net461/System.Security.Principal.Windows.dll",
+        "runtimes/win/lib/net461/System.Security.Principal.Windows.xml",
+        "runtimes/win/lib/netcoreapp2.0/System.Security.Principal.Windows.dll",
+        "runtimes/win/lib/netcoreapp2.0/System.Security.Principal.Windows.xml",
+        "runtimes/win/lib/netcoreapp2.1/System.Security.Principal.Windows.dll",
+        "runtimes/win/lib/netcoreapp2.1/System.Security.Principal.Windows.xml",
+        "runtimes/win/lib/netstandard1.3/System.Security.Principal.Windows.dll",
+        "runtimes/win/lib/uap10.0.16299/_._",
+        "system.security.principal.windows.4.7.0.nupkg.sha512",
+        "system.security.principal.windows.nuspec",
+        "useSharedDesignerContext.txt",
+        "version.txt"
+      ]
+    },
     "Tmds.DBus.Protocol/0.15.0": {
       "sha512": "QVo/Y39nTYcCKBqrZuwHjXdwaky0yTQPIT3qUTEEK2MZfDtZWrJ2XyZ59zH8LBgB2fL5cWaTuP2pBTpGz/GeDQ==",
       "type": "package",
@@ -1625,11 +2337,13 @@
     }
   },
   "projectFileDependencyGroups": {
-    "net8.0": [
+    "net8.0-windows10.0.19041": [
       "Avalonia >= 11.0.10",
       "Avalonia.Desktop >= 11.0.10",
       "Avalonia.Themes.Simple >= 11.0.10",
-      "UglyToad.PdfPig >= 1.7.0-custom-5"
+      "NAudio >= 2.2.1",
+      "UglyToad.PdfPig >= 1.7.0-custom-5",
+      "org.k2fsa.sherpa.onnx >= 1.12.28"
     ]
   },
   "packageFolders": {
@@ -1653,15 +2367,15 @@
         "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
       ],
       "originalTargetFrameworks": [
-        "net8.0"
+        "net8.0-windows10.0.19041.0"
       ],
       "sources": {
         "C:\\Program Files (x86)\\Microsoft SDKs\\NuGetPackages\\": {},
         "https://api.nuget.org/v3/index.json": {}
       },
       "frameworks": {
-        "net8.0": {
-          "targetAlias": "net8.0",
+        "net8.0-windows10.0.19041": {
+          "targetAlias": "net8.0-windows10.0.19041.0",
           "projectReferences": {}
         }
       },
@@ -1678,8 +2392,8 @@
       "SdkAnalysisLevel": "10.0.200"
     },
     "frameworks": {
-      "net8.0": {
-        "targetAlias": "net8.0",
+      "net8.0-windows10.0.19041": {
+        "targetAlias": "net8.0-windows10.0.19041.0",
         "dependencies": {
           "Avalonia": {
             "target": "Package",
@@ -1693,9 +2407,17 @@
             "target": "Package",
             "version": "[11.0.10, )"
           },
+          "NAudio": {
+            "target": "Package",
+            "version": "[2.2.1, )"
+          },
           "UglyToad.PdfPig": {
             "target": "Package",
             "version": "[1.7.0-custom-5, )"
+          },
+          "org.k2fsa.sherpa.onnx": {
+            "target": "Package",
+            "version": "[1.12.28, )"
           }
         },
         "imports": [
@@ -1709,12 +2431,21 @@
         ],
         "assetTargetFallback": true,
         "warn": true,
+        "downloadDependencies": [
+          {
+            "name": "Microsoft.Windows.SDK.NET.Ref",
+            "version": "[10.0.19041.57, 10.0.19041.57]"
+          }
+        ],
         "frameworkReferences": {
           "Microsoft.NETCore.App": {
             "privateAssets": "all"
+          },
+          "Microsoft.Windows.SDK.NET.Ref.Windows": {
+            "privateAssets": "all"
           }
         },
-        "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\10.0.200/PortableRuntimeIdentifierGraph.json"
+        "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\10.0.201/PortableRuntimeIdentifierGraph.json"
       }
     }
   }

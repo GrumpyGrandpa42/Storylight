@@ -1,25 +1,27 @@
 using NAudio.Wave;
+using SherpaOnnx;
 using StoryLight.App.Models;
-using Windows.Media.SpeechSynthesis;
-using Windows.Storage.Streams;
 
 namespace StoryLight.App.Services;
 
-public sealed class WindowsSpeechService : ITextToSpeechService
+public sealed class SherpaOnnxSpeechService : ITextToSpeechService
 {
     public event EventHandler? PlaybackCompleted;
 
     private readonly SemaphoreSlim _mutex = new(1, 1);
-    private SpeechSynthesizer? _synthesizer;
+    private readonly SherpaVoiceCatalog _voiceCatalog = new();
+    private readonly Dictionary<string, OfflineTts> _engineCache = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, SherpaVoiceDefinition> _voiceDefinitions = new(StringComparer.OrdinalIgnoreCase);
+    private CancellationTokenSource? _generationCts;
     private CancellationTokenSource? _playbackMonitorCts;
     private WaveOutEvent? _waveOut;
-    private WaveFileReader? _waveReader;
+    private RawSourceWaveStream? _audioStream;
     private MemoryStream? _audioBuffer;
     private bool _disposed;
     private int _rate;
     private IReadOnlyList<TtsVoiceInfo> _voices = Array.Empty<TtsVoiceInfo>();
 
-    public bool IsAvailable => OperatingSystem.IsWindows() && _voices.Count > 0;
+    public bool IsAvailable => _voices.Count > 0;
     public bool IsSpeaking { get; private set; }
     public bool IsPaused { get; private set; }
 
@@ -30,10 +32,8 @@ public sealed class WindowsSpeechService : ITextToSpeechService
     }
 
     public string? SelectedVoiceId { get; private set; }
-    public string VoicesFolderPath => string.Empty;
-    public string StatusSummary => _voices.Count > 0
-        ? "Windows voices are available."
-        : "No Windows voices are available.";
+    public string VoicesFolderPath => _voiceCatalog.VoicesRootDirectory;
+    public string StatusSummary { get; private set; } = "No sherpa voices loaded.";
     public IReadOnlyList<TtsVoiceInfo> Voices => _voices;
 
     public async Task InitializeAsync(SpeechSettings settings, CancellationToken cancellationToken = default)
@@ -47,37 +47,37 @@ public sealed class WindowsSpeechService : ITextToSpeechService
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        if (!OperatingSystem.IsWindows())
-        {
-            _voices = Array.Empty<TtsVoiceInfo>();
-            SelectedVoiceId = null;
-            return;
-        }
-
         await _mutex.WaitAsync(cancellationToken);
         try
         {
             ThrowIfDisposed();
 
-            var synthesizer = EnsureSynthesizer();
-            _voices = SpeechSynthesizer.AllVoices
-                .Select(voice => new TtsVoiceInfo(voice.Id, BuildVoiceDisplayName(voice)))
-                .OrderBy(voice => voice.DisplayName, StringComparer.CurrentCultureIgnoreCase)
+            var discovery = _voiceCatalog.Discover();
+            var currentVoiceIds = discovery.Voices.Select(voice => voice.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            DisposeMissingEngines(currentVoiceIds);
+
+            _voiceDefinitions.Clear();
+            foreach (var definition in discovery.Voices)
+            {
+                _voiceDefinitions[definition.Id] = definition;
+            }
+
+            _voices = discovery.Voices
+                .Select(definition => new TtsVoiceInfo(definition.Id, definition.DisplayName))
                 .ToArray();
 
             if (_voices.Count == 0)
             {
                 SelectedVoiceId = null;
-                return;
+                CancelGenerationCore();
+                StopPlaybackCore();
             }
-
-            if (string.IsNullOrWhiteSpace(SelectedVoiceId) || !_voices.Any(voice => voice.Id == SelectedVoiceId))
+            else if (string.IsNullOrWhiteSpace(SelectedVoiceId) || !_voiceDefinitions.ContainsKey(SelectedVoiceId))
             {
                 SelectedVoiceId = _voices[0].Id;
             }
 
-            ApplySelectedVoice(synthesizer);
-            ApplyRate(synthesizer);
+            StatusSummary = discovery.StatusSummary;
         }
         finally
         {
@@ -94,11 +94,6 @@ public sealed class WindowsSpeechService : ITextToSpeechService
         {
             ThrowIfDisposed();
             SelectedVoiceId = _voices.FirstOrDefault(voice => voice.Id == voiceId)?.Id ?? _voices.FirstOrDefault()?.Id;
-
-            if (_synthesizer is not null)
-            {
-                ApplySelectedVoice(_synthesizer);
-            }
         }
         finally
         {
@@ -108,30 +103,85 @@ public sealed class WindowsSpeechService : ITextToSpeechService
 
     public async Task SpeakAsync(string text, CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(text) || !OperatingSystem.IsWindows())
+        if (string.IsNullOrWhiteSpace(text))
         {
             return;
         }
 
-        cancellationToken.ThrowIfCancellationRequested();
+        SherpaVoiceDefinition definition;
+        OfflineTts engine;
+        CancellationTokenSource generationCts;
 
         await _mutex.WaitAsync(cancellationToken);
         try
         {
             ThrowIfDisposed();
+
+            if (SelectedVoiceId is null || !_voiceDefinitions.TryGetValue(SelectedVoiceId, out definition!))
+            {
+                throw new InvalidOperationException(StatusSummary);
+            }
+
+            CancelGenerationCore();
             StopPlaybackCore();
 
-            var synthesizer = EnsureSynthesizer();
-            ApplySelectedVoice(synthesizer);
-            ApplyRate(synthesizer);
-
-            using var stream = await synthesizer.SynthesizeTextToStreamAsync(text);
-            var audioBytes = await ReadSpeechBytesAsync(stream, cancellationToken);
-            StartPlayback(audioBytes);
+            engine = GetOrCreateEngineCore(definition);
+            generationCts = new CancellationTokenSource();
+            _generationCts = generationCts;
+            IsSpeaking = true;
+            IsPaused = false;
         }
         finally
         {
             _mutex.Release();
+        }
+
+        OfflineTtsGeneratedAudio? generatedAudio = null;
+        try
+        {
+            var speed = MapRateToSpeed(Rate);
+            generatedAudio = await Task.Run(() => engine.Generate(text, speed, definition.SpeakerId), CancellationToken.None);
+
+            await _mutex.WaitAsync(cancellationToken);
+            try
+            {
+                if (generationCts.IsCancellationRequested || !ReferenceEquals(_generationCts, generationCts))
+                {
+                    return;
+                }
+
+                StartPlaybackCore(generatedAudio);
+                generatedAudio = null;
+            }
+            finally
+            {
+                _mutex.Release();
+            }
+        }
+        catch
+        {
+            await _mutex.WaitAsync(cancellationToken);
+            try
+            {
+                if (ReferenceEquals(_generationCts, generationCts))
+                {
+                    _generationCts = null;
+                }
+
+                IsSpeaking = false;
+                IsPaused = false;
+            }
+            finally
+            {
+                _mutex.Release();
+            }
+
+            throw;
+        }
+        finally
+        {
+            generatedAudio?.Dispose();
+            generationCts.Dispose();
         }
     }
 
@@ -180,6 +230,7 @@ public sealed class WindowsSpeechService : ITextToSpeechService
         await _mutex.WaitAsync();
         try
         {
+            CancelGenerationCore();
             StopPlaybackCore();
         }
         finally
@@ -196,57 +247,50 @@ public sealed class WindowsSpeechService : ITextToSpeechService
         }
 
         _disposed = true;
-        CancelPlaybackMonitor();
+
+        CancelGenerationCore();
         StopPlaybackCore();
-        _synthesizer?.Dispose();
-        _synthesizer = null;
+
+        foreach (var engine in _engineCache.Values)
+        {
+            engine.Dispose();
+        }
+
+        _engineCache.Clear();
         _mutex.Dispose();
     }
 
-    private SpeechSynthesizer EnsureSynthesizer()
+    private OfflineTts GetOrCreateEngineCore(SherpaVoiceDefinition definition)
     {
-        _synthesizer ??= new SpeechSynthesizer();
-        return _synthesizer;
-    }
-
-    private void ApplySelectedVoice(SpeechSynthesizer synthesizer)
-    {
-        if (string.IsNullOrWhiteSpace(SelectedVoiceId))
+        if (_engineCache.TryGetValue(definition.Id, out var existing))
         {
-            return;
+            return existing;
         }
 
-        var voice = SpeechSynthesizer.AllVoices.FirstOrDefault(candidate =>
-            string.Equals(candidate.Id, SelectedVoiceId, StringComparison.OrdinalIgnoreCase));
+        var engine = new OfflineTts(definition.Config);
+        _engineCache[definition.Id] = engine;
+        return engine;
+    }
 
-        if (voice is not null)
+    private void DisposeMissingEngines(HashSet<string> availableVoiceIds)
+    {
+        foreach (var staleVoiceId in _engineCache.Keys.Where(id => !availableVoiceIds.Contains(id)).ToArray())
         {
-            synthesizer.Voice = voice;
+            _engineCache[staleVoiceId].Dispose();
+            _engineCache.Remove(staleVoiceId);
         }
     }
 
-    private void ApplyRate(SpeechSynthesizer synthesizer)
+    private void StartPlaybackCore(OfflineTtsGeneratedAudio generatedAudio)
     {
-        synthesizer.Options.SpeakingRate = Rate switch
-        {
-            <= -3 => 0.6,
-            -2 => 0.75,
-            -1 => 0.9,
-            0 => 1.0,
-            1 => 1.15,
-            2 => 1.3,
-            _ => 1.45
-        };
-    }
-
-    private void StartPlayback(byte[] audioBytes)
-    {
+        var audioBytes = ConvertSamplesToBytes(generatedAudio.Samples);
         _audioBuffer = new MemoryStream(audioBytes, writable: false);
-        _waveReader = new WaveFileReader(_audioBuffer);
+        _audioStream = new RawSourceWaveStream(_audioBuffer, WaveFormat.CreateIeeeFloatWaveFormat(generatedAudio.SampleRate, 1));
         _waveOut = new WaveOutEvent();
-        _waveOut.Init(_waveReader);
+        _waveOut.Init(_audioStream);
         _waveOut.Play();
 
+        _generationCts = null;
         _playbackMonitorCts = new CancellationTokenSource();
         _ = MonitorPlaybackAsync(_waveOut, _playbackMonitorCts.Token);
         IsSpeaking = true;
@@ -288,6 +332,12 @@ public sealed class WindowsSpeechService : ITextToSpeechService
         }
     }
 
+    private void CancelGenerationCore()
+    {
+        _generationCts?.Cancel();
+        _generationCts = null;
+    }
+
     private void StopPlaybackCore()
     {
         CancelPlaybackMonitor();
@@ -308,10 +358,10 @@ public sealed class WindowsSpeechService : ITextToSpeechService
     private void CleanupPlaybackResources()
     {
         _waveOut?.Dispose();
-        _waveReader?.Dispose();
+        _audioStream?.Dispose();
         _audioBuffer?.Dispose();
         _waveOut = null;
-        _waveReader = null;
+        _audioStream = null;
         _audioBuffer = null;
     }
 
@@ -322,29 +372,32 @@ public sealed class WindowsSpeechService : ITextToSpeechService
         _playbackMonitorCts = null;
     }
 
-    private static async Task<byte[]> ReadSpeechBytesAsync(SpeechSynthesisStream stream, CancellationToken cancellationToken)
+    private static byte[] ConvertSamplesToBytes(float[] samples)
     {
-        using var input = stream.GetInputStreamAt(0);
-        using var reader = new DataReader(input);
-        var size = checked((uint)stream.Size);
-        await reader.LoadAsync(size).AsTask(cancellationToken);
-        var bytes = new byte[size];
-        reader.ReadBytes(bytes);
+        var bytes = new byte[samples.Length * sizeof(float)];
+        Buffer.BlockCopy(samples, 0, bytes, 0, bytes.Length);
         return bytes;
     }
 
-    private static string BuildVoiceDisplayName(VoiceInformation voice)
+    private static float MapRateToSpeed(int rate)
     {
-        return string.IsNullOrWhiteSpace(voice.Language)
-            ? voice.DisplayName
-            : $"{voice.DisplayName} ({voice.Language})";
+        return rate switch
+        {
+            <= -3 => 0.7f,
+            -2 => 0.82f,
+            -1 => 0.92f,
+            0 => 1.0f,
+            1 => 1.08f,
+            2 => 1.18f,
+            _ => 1.28f
+        };
     }
 
     private void ThrowIfDisposed()
     {
         if (_disposed)
         {
-            throw new ObjectDisposedException(nameof(WindowsSpeechService));
+            throw new ObjectDisposedException(nameof(SherpaOnnxSpeechService));
         }
     }
 }

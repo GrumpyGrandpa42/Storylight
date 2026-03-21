@@ -11,6 +11,7 @@
           "Avalonia": "11.0.10",
           "Avalonia.Desktop": "11.0.10",
           "Avalonia.Themes.Simple": "11.0.10",
+          "NAudio": "2.2.1",
           "UglyToad.PdfPig": "1.7.0-custom-5"
         },
         "runtime": {
@@ -19,8 +20,10 @@
       },
       "Avalonia/11.0.10": {
         "dependencies": {
+          "Avalonia.BuildServices": "0.0.29",
           "Avalonia.Remote.Protocol": "11.0.10",
-          "MicroCom.Runtime": "0.11.0"
+          "MicroCom.Runtime": "0.11.0",
+          "System.ComponentModel.Annotations": "4.5.0"
         },
         "runtime": {
           "lib/net6.0/Avalonia.Base.dll": {
@@ -70,20 +73,21 @@
           "runtimes/win-arm64/native/av_libglesv2.dll": {
             "rid": "win-arm64",
             "assetType": "native",
-            "fileVersion": "2.1.0.0"
+            "fileVersion": "0.0.0.0"
           },
           "runtimes/win-x64/native/av_libglesv2.dll": {
             "rid": "win-x64",
             "assetType": "native",
-            "fileVersion": "2.1.0.0"
+            "fileVersion": "0.0.0.0"
           },
           "runtimes/win-x86/native/av_libglesv2.dll": {
             "rid": "win-x86",
             "assetType": "native",
-            "fileVersion": "2.1.0.0"
+            "fileVersion": "0.0.0.0"
           }
         }
       },
+      "Avalonia.BuildServices/0.0.29": {},
       "Avalonia.Desktop/11.0.10": {
         "dependencies": {
           "Avalonia": "11.0.10",
@@ -142,8 +146,10 @@
           "Avalonia": "11.0.10",
           "HarfBuzzSharp": "7.3.0",
           "HarfBuzzSharp.NativeAssets.Linux": "7.3.0",
+          "HarfBuzzSharp.NativeAssets.WebAssembly": "7.3.0",
           "SkiaSharp": "2.88.7",
-          "SkiaSharp.NativeAssets.Linux": "2.88.7"
+          "SkiaSharp.NativeAssets.Linux": "2.88.7",
+          "SkiaSharp.NativeAssets.WebAssembly": "2.88.7"
         },
         "runtime": {
           "lib/net6.0/Avalonia.Skia.dll": {
@@ -166,7 +172,8 @@
       "Avalonia.Win32/11.0.10": {
         "dependencies": {
           "Avalonia": "11.0.10",
-          "Avalonia.Angle.Windows.Natives": "2.1.0.2023020321"
+          "Avalonia.Angle.Windows.Natives": "2.1.0.2023020321",
+          "System.Numerics.Vectors": "4.5.0"
         },
         "runtime": {
           "lib/net6.0/Avalonia.Win32.dll": {
@@ -236,6 +243,7 @@
           }
         }
       },
+      "HarfBuzzSharp.NativeAssets.WebAssembly/7.3.0": {},
       "HarfBuzzSharp.NativeAssets.Win32/7.3.0": {
         "runtimeTargets": {
           "runtimes/win-arm64/native/libHarfBuzzSharp.dll": {
@@ -260,6 +268,82 @@
           "lib/net5.0/MicroCom.Runtime.dll": {
             "assemblyVersion": "0.11.0.0",
             "fileVersion": "0.11.0.0"
+          }
+        }
+      },
+      "Microsoft.NETCore.Platforms/3.1.0": {},
+      "Microsoft.Win32.Registry/4.7.0": {
+        "dependencies": {
+          "System.Security.AccessControl": "4.7.0",
+          "System.Security.Principal.Windows": "4.7.0"
+        }
+      },
+      "NAudio/2.2.1": {
+        "dependencies": {
+          "NAudio.Asio": "2.2.1",
+          "NAudio.Core": "2.2.1",
+          "NAudio.Midi": "2.2.1",
+          "NAudio.Wasapi": "2.2.1",
+          "NAudio.WinMM": "2.2.1"
+        },
+        "runtime": {
+          "lib/net6.0/NAudio.dll": {
+            "assemblyVersion": "2.2.1.0",
+            "fileVersion": "2.2.1.0"
+          }
+        }
+      },
+      "NAudio.Asio/2.2.1": {
+        "dependencies": {
+          "Microsoft.Win32.Registry": "4.7.0",
+          "NAudio.Core": "2.2.1"
+        },
+        "runtime": {
+          "lib/netstandard2.0/NAudio.Asio.dll": {
+            "assemblyVersion": "2.2.1.0",
+            "fileVersion": "2.2.1.0"
+          }
+        }
+      },
+      "NAudio.Core/2.2.1": {
+        "runtime": {
+          "lib/netstandard2.0/NAudio.Core.dll": {
+            "assemblyVersion": "2.2.1.0",
+            "fileVersion": "2.2.1.0"
+          }
+        }
+      },
+      "NAudio.Midi/2.2.1": {
+        "dependencies": {
+          "NAudio.Core": "2.2.1"
+        },
+        "runtime": {
+          "lib/netstandard2.0/NAudio.Midi.dll": {
+            "assemblyVersion": "2.2.1.0",
+            "fileVersion": "2.2.1.0"
+          }
+        }
+      },
+      "NAudio.Wasapi/2.2.1": {
+        "dependencies": {
+          "NAudio.Core": "2.2.1"
+        },
+        "runtime": {
+          "lib/netstandard2.0/NAudio.Wasapi.dll": {
+            "assemblyVersion": "2.2.1.0",
+            "fileVersion": "2.2.1.0"
+          }
+        }
+      },
+      "NAudio.WinMM/2.2.1": {
+        "dependencies": {
+          "Microsoft.Win32.Registry": "4.7.0",
+          "NAudio.Core": "2.2.1"
+        },
+        "runtime": {
+          "lib/netstandard2.0/NAudio.WinMM.dll": {
+            "assemblyVersion": "2.2.1.0",
+            "fileVersion": "2.2.1.0"
           }
         }
       },
@@ -311,6 +395,7 @@
           }
         }
       },
+      "SkiaSharp.NativeAssets.WebAssembly/2.88.7": {},
       "SkiaSharp.NativeAssets.Win32/2.88.7": {
         "runtimeTargets": {
           "runtimes/win-arm64/native/libSkiaSharp.dll": {
@@ -330,6 +415,7 @@
           }
         }
       },
+      "System.ComponentModel.Annotations/4.5.0": {},
       "System.IO.Pipelines/6.0.0": {
         "runtime": {
           "lib/net6.0/System.IO.Pipelines.dll": {
@@ -338,6 +424,14 @@
           }
         }
       },
+      "System.Numerics.Vectors/4.5.0": {},
+      "System.Security.AccessControl/4.7.0": {
+        "dependencies": {
+          "Microsoft.NETCore.Platforms": "3.1.0",
+          "System.Security.Principal.Windows": "4.7.0"
+        }
+      },
+      "System.Security.Principal.Windows/4.7.0": {},
       "Tmds.DBus.Protocol/0.15.0": {
         "dependencies": {
           "System.IO.Pipelines": "6.0.0"
@@ -429,6 +523,13 @@
       "path": "avalonia.angle.windows.natives/2.1.0.2023020321",
       "hashPath": "avalonia.angle.windows.natives.2.1.0.2023020321.nupkg.sha512"
     },
+    "Avalonia.BuildServices/0.0.29": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-U4eJLQdoDNHXtEba7MZUCwrBErBTxFp6sUewXBOdAhU0Kwzwaa/EKFcYm8kpcysjzKtfB4S0S9n0uxKZFz/ikw==",
+      "path": "avalonia.buildservices/0.0.29",
+      "hashPath": "avalonia.buildservices.0.0.29.nupkg.sha512"
+    },
     "Avalonia.Desktop/11.0.10": {
       "type": "package",
       "serviceable": true,
@@ -506,6 +607,13 @@
       "path": "harfbuzzsharp.nativeassets.macos/7.3.0",
       "hashPath": "harfbuzzsharp.nativeassets.macos.7.3.0.nupkg.sha512"
     },
+    "HarfBuzzSharp.NativeAssets.WebAssembly/7.3.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-cnl4I6P+VeujfSSD3ZrC5f0TrTGt9EKgCOoZ3LpgLI2xobBKLi5bxOaN2oY6B0xVXxQEhEaWBotg7AuECg00Iw==",
+      "path": "harfbuzzsharp.nativeassets.webassembly/7.3.0",
+      "hashPath": "harfbuzzsharp.nativeassets.webassembly.7.3.0.nupkg.sha512"
+    },
     "HarfBuzzSharp.NativeAssets.Win32/7.3.0": {
       "type": "package",
       "serviceable": true,
@@ -519,6 +627,62 @@
       "sha512": "sha512-MEnrZ3UIiH40hjzMDsxrTyi8dtqB5ziv3iBeeU4bXsL/7NLSal9F1lZKpK+tfBRnUoDSdtcW3KufE4yhATOMCA==",
       "path": "microcom.runtime/0.11.0",
       "hashPath": "microcom.runtime.0.11.0.nupkg.sha512"
+    },
+    "Microsoft.NETCore.Platforms/3.1.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-z7aeg8oHln2CuNulfhiLYxCVMPEwBl3rzicjvIX+4sUuCwvXw5oXQEtbiU2c0z4qYL5L3Kmx0mMA/+t/SbY67w==",
+      "path": "microsoft.netcore.platforms/3.1.0",
+      "hashPath": "microsoft.netcore.platforms.3.1.0.nupkg.sha512"
+    },
+    "Microsoft.Win32.Registry/4.7.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-KSrRMb5vNi0CWSGG1++id2ZOs/1QhRqROt+qgbEAdQuGjGrFcl4AOl4/exGPUYz2wUnU42nvJqon1T3U0kPXLA==",
+      "path": "microsoft.win32.registry/4.7.0",
+      "hashPath": "microsoft.win32.registry.4.7.0.nupkg.sha512"
+    },
+    "NAudio/2.2.1": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-c0DzwiyyklM0TP39Y7RObwO3QkWecgM6H60ikiEnsV/aEAJPbj5MFCLaD8BSfKuZe0HGuh9GRGWWlJmSxDc9MA==",
+      "path": "naudio/2.2.1",
+      "hashPath": "naudio.2.2.1.nupkg.sha512"
+    },
+    "NAudio.Asio/2.2.1": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-hQglyOT5iT3XuGpBP8ZG0+aoqwRfidHjTNehpoWwX0g6KJEgtH2VaqM2nuJ2mheKZa/IBqB4YQTZVvrIapzfOA==",
+      "path": "naudio.asio/2.2.1",
+      "hashPath": "naudio.asio.2.2.1.nupkg.sha512"
+    },
+    "NAudio.Core/2.2.1": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-GgkdP6K/7FqXFo7uHvoqGZTJvW4z8g2IffhOO4JHaLzKCdDOUEzVKtveoZkCuUX8eV2HAINqi7VFqlFndrnz/g==",
+      "path": "naudio.core/2.2.1",
+      "hashPath": "naudio.core.2.2.1.nupkg.sha512"
+    },
+    "NAudio.Midi/2.2.1": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-6r23ylGo5aeP02WFXsPquz0T0hFJWyh+7t++tz19tc3Kr38NHm+Z9j+FiAv+xkH8tZqXJqus9Q8p6u7bidIgbw==",
+      "path": "naudio.midi/2.2.1",
+      "hashPath": "naudio.midi.2.2.1.nupkg.sha512"
+    },
+    "NAudio.Wasapi/2.2.1": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-lFfXoqacZZe0WqNChJgGYI+XV/n/61LzPHT3C1CJp4khoxeo2sziyX5wzNYWeCMNbsWxFvT3b3iXeY1UYjBhZw==",
+      "path": "naudio.wasapi/2.2.1",
+      "hashPath": "naudio.wasapi.2.2.1.nupkg.sha512"
+    },
+    "NAudio.WinMM/2.2.1": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-xFHRFwH4x6aq3IxRbewvO33ugJRvZFEOfO62i7uQJRUNW2cnu6BeBTHUS0JD5KBucZbHZaYqxQG8dwZ47ezQuQ==",
+      "path": "naudio.winmm/2.2.1",
+      "hashPath": "naudio.winmm.2.2.1.nupkg.sha512"
     },
     "SkiaSharp/2.88.7": {
       "type": "package",
@@ -541,6 +705,13 @@
       "path": "skiasharp.nativeassets.macos/2.88.7",
       "hashPath": "skiasharp.nativeassets.macos.2.88.7.nupkg.sha512"
     },
+    "SkiaSharp.NativeAssets.WebAssembly/2.88.7": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-elmOOQTO0QXmnnHx7GliF7VNJqZkWgPqqPsXapEN0EEZJ9fGblYWmD6cqxTwaRTMCUFeLpn8+gTzY8j000MxZQ==",
+      "path": "skiasharp.nativeassets.webassembly/2.88.7",
+      "hashPath": "skiasharp.nativeassets.webassembly.2.88.7.nupkg.sha512"
+    },
     "SkiaSharp.NativeAssets.Win32/2.88.7": {
       "type": "package",
       "serviceable": true,
@@ -548,12 +719,40 @@
       "path": "skiasharp.nativeassets.win32/2.88.7",
       "hashPath": "skiasharp.nativeassets.win32.2.88.7.nupkg.sha512"
     },
+    "System.ComponentModel.Annotations/4.5.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-UxYQ3FGUOtzJ7LfSdnYSFd7+oEv6M8NgUatatIN2HxNtDdlcvFAf+VIq4Of9cDMJEJC0aSRv/x898RYhB4Yppg==",
+      "path": "system.componentmodel.annotations/4.5.0",
+      "hashPath": "system.componentmodel.annotations.4.5.0.nupkg.sha512"
+    },
     "System.IO.Pipelines/6.0.0": {
       "type": "package",
       "serviceable": true,
       "sha512": "sha512-mXX66shZ4xLlI3vNLaJ0lt8OIZdmXTvIqXRdQX5HLVGSkLhINLsVhyZuX2UdRFnOGkqnwmMUs40pIIQ7mna4+A==",
       "path": "system.io.pipelines/6.0.0",
       "hashPath": "system.io.pipelines.6.0.0.nupkg.sha512"
+    },
+    "System.Numerics.Vectors/4.5.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-QQTlPTl06J/iiDbJCiepZ4H//BVraReU4O4EoRw1U02H5TLUIT7xn3GnDp9AXPSlJUDyFs4uWjWafNX6WrAojQ==",
+      "path": "system.numerics.vectors/4.5.0",
+      "hashPath": "system.numerics.vectors.4.5.0.nupkg.sha512"
+    },
+    "System.Security.AccessControl/4.7.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-JECvTt5aFF3WT3gHpfofL2MNNP6v84sxtXxpqhLBCcDRzqsPBmHhQ6shv4DwwN2tRlzsUxtb3G9M3763rbXKDg==",
+      "path": "system.security.accesscontrol/4.7.0",
+      "hashPath": "system.security.accesscontrol.4.7.0.nupkg.sha512"
+    },
+    "System.Security.Principal.Windows/4.7.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-ojD0PX0XhneCsUbAZVKdb7h/70vyYMDYs85lwEI+LngEONe/17A0cFaRFqZU+sOEidcVswYWikYOQ9PPfjlbtQ==",
+      "path": "system.security.principal.windows/4.7.0",
+      "hashPath": "system.security.principal.windows.4.7.0.nupkg.sha512"
     },
     "Tmds.DBus.Protocol/0.15.0": {
       "type": "package",

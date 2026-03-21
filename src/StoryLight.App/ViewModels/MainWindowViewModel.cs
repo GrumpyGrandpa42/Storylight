@@ -1,9 +1,11 @@
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Platform.Storage;
+using Avalonia.Threading;
 using StoryLight.App.Models;
 using StoryLight.App.Services;
 using StoryLight.App.Utils;
@@ -28,7 +30,11 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     private double _zoomLevel = 1.0;
     private int _currentPageIndex;
     private int _speechRate;
+    private int? _activeSpeechPageIndex;
     private bool _isBusy;
+    private bool _isUpdatingSpeechSelection;
+    private bool _continueToNextPage;
+    private TtsVoiceInfo? _selectedTtsVoice;
 
     public MainWindowViewModel(IDocumentImporter documentImporter, IReaderStateStore stateStore, ITextToSpeechService textToSpeechService)
     {
@@ -37,12 +43,14 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         _textToSpeechService = textToSpeechService;
 
         LibraryItems = new ObservableCollection<LibraryItem>();
+        TtsVoices = new ObservableCollection<TtsVoiceInfo>();
         SpeechRates = new ReadOnlyCollection<int>(new[] { -3, -2, -1, 0, 1, 2, 3 });
 
         ImportDocumentCommand = new RelayCommand(async () => await ImportDocumentAsync(), () => !IsBusy);
         OpenSelectedCommand = new RelayCommand(async () => await OpenSelectedAsync(), () => !IsBusy && SelectedLibraryItem is not null);
         RemoveSelectedCommand = new RelayCommand(RemoveSelected, () => !IsBusy && SelectedLibraryItem is not null);
         DeleteSavedEpubCommand = new RelayCommand(DeleteSavedEpub, CanDeleteSelectedEpub);
+        OpenVoicesFolderCommand = new RelayCommand(OpenVoicesFolder, () => !IsBusy && OperatingSystem.IsWindows());
         PreviousPageCommand = new RelayCommand(() => ChangePage(-1), () => CurrentPageIndex > 0);
         NextPageCommand = new RelayCommand(() => ChangePage(1), () => CurrentPageIndex < PageCount - 1);
         ZoomInCommand = new RelayCommand(() => ChangeZoom(0.1), () => ZoomLevel < 2.0);
@@ -51,11 +59,13 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         PauseSpeechCommand = new RelayCommand(async () => await PauseSpeechAsync(), () => _textToSpeechService.IsAvailable && _textToSpeechService.IsSpeaking && !_textToSpeechService.IsPaused);
         ResumeSpeechCommand = new RelayCommand(async () => await ResumeSpeechAsync(), () => _textToSpeechService.IsAvailable && _textToSpeechService.IsPaused);
         StopSpeechCommand = new RelayCommand(async () => await StopSpeechAsync(), () => _textToSpeechService.IsAvailable && (_textToSpeechService.IsSpeaking || _textToSpeechService.IsPaused));
+        _textToSpeechService.PlaybackCompleted += OnPlaybackCompleted;
 
         _ = LoadStateAsync();
     }
 
     public ObservableCollection<LibraryItem> LibraryItems { get; }
+    public ObservableCollection<TtsVoiceInfo> TtsVoices { get; }
 
     public IReadOnlyList<int> SpeechRates { get; }
 
@@ -159,12 +169,39 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         {
             if (SetProperty(ref _speechRate, value))
             {
+                _appState.Speech.Rate = value;
                 _textToSpeechService.Rate = value;
+                _ = PersistStateAsync();
             }
         }
     }
 
     public bool IsTextToSpeechAvailable => _textToSpeechService.IsAvailable;
+
+    public bool ContinueToNextPage
+    {
+        get => _continueToNextPage;
+        set
+        {
+            if (SetProperty(ref _continueToNextPage, value))
+            {
+                _appState.Speech.ContinueToNextPage = value;
+                _ = PersistStateAsync();
+            }
+        }
+    }
+
+    public TtsVoiceInfo? SelectedTtsVoice
+    {
+        get => _selectedTtsVoice;
+        set
+        {
+            if (SetProperty(ref _selectedTtsVoice, value) && !_isUpdatingSpeechSelection)
+            {
+                _ = ApplySelectedVoiceAsync();
+            }
+        }
+    }
 
     public bool IsBusy
     {
@@ -182,6 +219,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     public RelayCommand OpenSelectedCommand { get; }
     public RelayCommand RemoveSelectedCommand { get; }
     public RelayCommand DeleteSavedEpubCommand { get; }
+    public RelayCommand OpenVoicesFolderCommand { get; }
     public RelayCommand PreviousPageCommand { get; }
     public RelayCommand NextPageCommand { get; }
     public RelayCommand ZoomInCommand { get; }
@@ -199,8 +237,14 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
     public void HandleZoomOutShortcut() => ChangeZoom(-0.1);
 
+    public void HandleWindowActivated()
+    {
+        _ = RefreshTtsOptionsAsync(updateStatus: false, persistState: false);
+    }
+
     public void Dispose()
     {
+        _textToSpeechService.PlaybackCompleted -= OnPlaybackCompleted;
         _textToSpeechService.Dispose();
     }
 
@@ -212,6 +256,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             _appState.DefaultZoomLevel = state.DefaultZoomLevel;
             _appState.Library = state.Library;
             _appState.ReadingPositions = state.ReadingPositions;
+            _appState.Speech = state.Speech ?? new SpeechSettings();
 
             foreach (var item in _appState.Library.OrderByDescending(item => item.LastOpenedUtc))
             {
@@ -220,7 +265,15 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             }
 
             ZoomLevel = _appState.DefaultZoomLevel <= 0 ? 1.0 : _appState.DefaultZoomLevel;
-            Status = LibraryItems.Count == 0 ? "Ready. Import a document to begin." : "Library restored.";
+            _speechRate = _appState.Speech.Rate;
+            _continueToNextPage = _appState.Speech.ContinueToNextPage;
+            RaisePropertyChanged(nameof(SpeechRate));
+            RaisePropertyChanged(nameof(ContinueToNextPage));
+            await _textToSpeechService.InitializeAsync(_appState.Speech);
+            await ReloadTtsOptionsAsync();
+            Status = _textToSpeechService.IsAvailable
+                ? LibraryItems.Count == 0 ? "Ready. Import a document to begin." : "Library restored."
+                : _textToSpeechService.StatusSummary;
         }
         catch (Exception ex)
         {
@@ -377,6 +430,33 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         }
     }
 
+    private void OpenVoicesFolder()
+    {
+        try
+        {
+            var folderPath = _textToSpeechService.VoicesFolderPath;
+            if (string.IsNullOrWhiteSpace(folderPath))
+            {
+                Status = "Voice folders are not available on this platform.";
+                return;
+            }
+
+            Directory.CreateDirectory(folderPath);
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = "explorer.exe",
+                Arguments = $"\"{folderPath}\"",
+                UseShellExecute = true
+            });
+
+            Status = $"Add a sherpa voice folder under {folderPath}, then return to StoryLight to refresh voices.";
+        }
+        catch (Exception ex)
+        {
+            Status = $"Unable to open voices folder: {ex.Message}";
+        }
+    }
+
     private void ChangePage(int delta)
     {
         if (_pages.Count == 0)
@@ -464,6 +544,68 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         }
     }
 
+    private async Task ApplySelectedVoiceAsync()
+    {
+        if (SelectedTtsVoice is null)
+        {
+            return;
+        }
+
+        await _textToSpeechService.SetVoiceAsync(SelectedTtsVoice.Id);
+        _appState.Speech.VoiceId = SelectedTtsVoice.Id;
+        await PersistStateAsync();
+        Status = $"Voice selected: {SelectedTtsVoice.DisplayName}.";
+    }
+
+    private async Task RefreshTtsOptionsAsync(bool updateStatus, bool persistState)
+    {
+        await _textToSpeechService.RefreshAsync();
+        await ReloadTtsOptionsAsync();
+
+        if (SelectedTtsVoice is not null)
+        {
+            _appState.Speech.VoiceId = SelectedTtsVoice.Id;
+        }
+        else
+        {
+            _appState.Speech.VoiceId = null;
+        }
+
+        if (persistState)
+        {
+            await PersistStateAsync();
+        }
+
+        if (updateStatus || !_textToSpeechService.IsAvailable)
+        {
+            Status = _textToSpeechService.StatusSummary;
+        }
+    }
+
+    private Task ReloadTtsOptionsAsync()
+    {
+        _isUpdatingSpeechSelection = true;
+        try
+        {
+            TtsVoices.Clear();
+            foreach (var voice in _textToSpeechService.Voices)
+            {
+                TtsVoices.Add(voice);
+            }
+
+            SelectedTtsVoice = TtsVoices.FirstOrDefault(voice => voice.Id == _textToSpeechService.SelectedVoiceId)
+                ?? TtsVoices.FirstOrDefault();
+            RaisePropertyChanged(nameof(IsTextToSpeechAvailable));
+        }
+        finally
+        {
+            _isUpdatingSpeechSelection = false;
+            RefreshCommandStates();
+        }
+
+        return Task.CompletedTask;
+    }
+
     private async Task ReadCurrentPageAsync()
     {
         if (_pages.Count == 0)
@@ -471,8 +613,24 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             return;
         }
 
-        await _textToSpeechService.SpeakAsync(_pages[CurrentPageIndex].Text);
-        Status = "Reading current page aloud.";
+        if (!_textToSpeechService.IsAvailable)
+        {
+            Status = _textToSpeechService.StatusSummary;
+            RefreshCommandStates();
+            return;
+        }
+
+        try
+        {
+            await _textToSpeechService.SpeakAsync(_pages[CurrentPageIndex].Text);
+            _activeSpeechPageIndex = CurrentPageIndex;
+            Status = "Reading current page aloud.";
+        }
+        catch (Exception ex)
+        {
+            Status = $"Read-aloud failed: {ex.Message}";
+        }
+
         RefreshCommandStates();
     }
 
@@ -493,8 +651,39 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     private async Task StopSpeechAsync()
     {
         await _textToSpeechService.StopAsync();
+        _activeSpeechPageIndex = null;
         Status = "Read-aloud stopped.";
         RefreshCommandStates();
+    }
+
+    private void OnPlaybackCompleted(object? sender, EventArgs e)
+    {
+        _ = Dispatcher.UIThread.InvokeAsync(async () =>
+        {
+            RefreshCommandStates();
+
+            if (!ContinueToNextPage || _activeSpeechPageIndex is null)
+            {
+                _activeSpeechPageIndex = null;
+                return;
+            }
+
+            if (_activeSpeechPageIndex.Value != CurrentPageIndex)
+            {
+                _activeSpeechPageIndex = null;
+                return;
+            }
+
+            if (CurrentPageIndex >= PageCount - 1)
+            {
+                _activeSpeechPageIndex = null;
+                Status = "Reached the end of the document.";
+                return;
+            }
+
+            ChangePage(1);
+            await ReadCurrentPageAsync();
+        });
     }
 
     private async Task PersistStateAsync()
@@ -669,6 +858,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         OpenSelectedCommand.RaiseCanExecuteChanged();
         RemoveSelectedCommand.RaiseCanExecuteChanged();
         DeleteSavedEpubCommand.RaiseCanExecuteChanged();
+        OpenVoicesFolderCommand.RaiseCanExecuteChanged();
         PreviousPageCommand.RaiseCanExecuteChanged();
         NextPageCommand.RaiseCanExecuteChanged();
         ZoomInCommand.RaiseCanExecuteChanged();

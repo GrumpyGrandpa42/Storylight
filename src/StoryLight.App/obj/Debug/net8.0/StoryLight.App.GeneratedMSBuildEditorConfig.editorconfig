@@ -1,9 +1,4 @@
 is_global = true
-build_property.AvaloniaNameGeneratorIsEnabled = true
-build_property.AvaloniaNameGeneratorBehavior = InitializeComponent
-build_property.AvaloniaNameGeneratorDefaultFieldModifier = internal
-build_property.AvaloniaNameGeneratorFilterByPath = *
-build_property.AvaloniaNameGeneratorFilterByNamespace = *
 build_property.TargetFramework = net8.0
 build_property.TargetFrameworkIdentifier = .NETCoreApp
 build_property.TargetFrameworkVersion = v8.0
@@ -20,12 +15,3 @@ build_property.EnableComHosting =
 build_property.EnableGeneratedComInterfaceComImportInterop = 
 build_property.EffectiveAnalysisLevelStyle = 8.0
 build_property.EnableCodeStyleSeverity = 
-
-[C:/Repos/StoryLight/src/StoryLight.App/App.axaml]
-build_metadata.AdditionalFiles.SourceItemGroup = AvaloniaXaml
-
-[C:/Repos/StoryLight/src/StoryLight.App/Views/LoadingWindow.axaml]
-build_metadata.AdditionalFiles.SourceItemGroup = AvaloniaXaml
-
-[C:/Repos/StoryLight/src/StoryLight.App/Views/MainWindow.axaml]
-build_metadata.AdditionalFiles.SourceItemGroup = AvaloniaXaml

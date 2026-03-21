@@ -1,6 +1,7 @@
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Markup.Xaml;
 using StoryLight.App.ViewModels;
 
 namespace StoryLight.App.Views;
@@ -11,6 +12,13 @@ public sealed partial class MainWindow : Window
     {
         InitializeComponent();
         AddHandler(KeyDownEvent, OnKeyDown, RoutingStrategies.Tunnel, handledEventsToo: true);
+        Activated += (_, _) =>
+        {
+            if (DataContext is MainWindowViewModel viewModel)
+            {
+                viewModel.HandleWindowActivated();
+            }
+        };
         Closed += (_, _) =>
         {
             if (DataContext is IDisposable disposable)
@@ -53,5 +61,24 @@ public sealed partial class MainWindow : Window
             viewModel.HandleZoomOutShortcut();
             e.Handled = true;
         }
+    }
+
+    private void OnLibraryDoubleTapped(object? sender, TappedEventArgs e)
+    {
+        if (DataContext is not MainWindowViewModel viewModel)
+        {
+            return;
+        }
+
+        if (viewModel.OpenSelectedCommand.CanExecute(null))
+        {
+            viewModel.OpenSelectedCommand.Execute(null);
+            e.Handled = true;
+        }
+    }
+
+    private void InitializeComponent()
+    {
+        AvaloniaXamlLoader.Load(this);
     }
 }

@@ -4,11 +4,8 @@ public static class TextToSpeechServiceFactory
 {
     public static ITextToSpeechService Create()
     {
-        if (OperatingSystem.IsWindows())
-        {
-            return new WindowsSpeechService();
-        }
-
-        return new NullTextToSpeechService();
+        return OperatingSystem.IsWindows()
+            ? new HybridTextToSpeechService()
+            : new NullTextToSpeechService();
     }
 }

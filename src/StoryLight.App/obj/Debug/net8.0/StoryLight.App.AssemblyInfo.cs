@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("StoryLight.App")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+5fe5cb8bb6cf80dc2e1c5849f2b986cf4b4b97e9")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+00f6c91c1cd2c2bdd65988fd1f8f5f4c63fbe5c3")]
 [assembly: System.Reflection.AssemblyProductAttribute("StoryLight.App")]
 [assembly: System.Reflection.AssemblyTitleAttribute("StoryLight.App")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

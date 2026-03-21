@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "dgSpecHash": "doXdpeQU0Nk=",
+  "dgSpecHash": "H0QjWCYL8+8=",
   "success": true,
   "projectFilePath": "C:\\Repos\\StoryLight\\src\\StoryLight.App\\StoryLight.App.csproj",
   "expectedPackageFiles": [
@@ -21,6 +21,23 @@
     "C:\\Users\\dwayn\\.nuget\\packages\\harfbuzzsharp.nativeassets.webassembly\\7.3.0\\harfbuzzsharp.nativeassets.webassembly.7.3.0.nupkg.sha512",
     "C:\\Users\\dwayn\\.nuget\\packages\\harfbuzzsharp.nativeassets.win32\\7.3.0\\harfbuzzsharp.nativeassets.win32.7.3.0.nupkg.sha512",
     "C:\\Users\\dwayn\\.nuget\\packages\\microcom.runtime\\0.11.0\\microcom.runtime.0.11.0.nupkg.sha512",
+    "C:\\Users\\dwayn\\.nuget\\packages\\microsoft.netcore.platforms\\3.1.0\\microsoft.netcore.platforms.3.1.0.nupkg.sha512",
+    "C:\\Users\\dwayn\\.nuget\\packages\\microsoft.win32.registry\\4.7.0\\microsoft.win32.registry.4.7.0.nupkg.sha512",
+    "C:\\Users\\dwayn\\.nuget\\packages\\naudio\\2.2.1\\naudio.2.2.1.nupkg.sha512",
+    "C:\\Users\\dwayn\\.nuget\\packages\\naudio.asio\\2.2.1\\naudio.asio.2.2.1.nupkg.sha512",
+    "C:\\Users\\dwayn\\.nuget\\packages\\naudio.core\\2.2.1\\naudio.core.2.2.1.nupkg.sha512",
+    "C:\\Users\\dwayn\\.nuget\\packages\\naudio.midi\\2.2.1\\naudio.midi.2.2.1.nupkg.sha512",
+    "C:\\Users\\dwayn\\.nuget\\packages\\naudio.wasapi\\2.2.1\\naudio.wasapi.2.2.1.nupkg.sha512",
+    "C:\\Users\\dwayn\\.nuget\\packages\\naudio.winforms\\2.2.1\\naudio.winforms.2.2.1.nupkg.sha512",
+    "C:\\Users\\dwayn\\.nuget\\packages\\naudio.winmm\\2.2.1\\naudio.winmm.2.2.1.nupkg.sha512",
+    "C:\\Users\\dwayn\\.nuget\\packages\\org.k2fsa.sherpa.onnx\\1.12.28\\org.k2fsa.sherpa.onnx.1.12.28.nupkg.sha512",
+    "C:\\Users\\dwayn\\.nuget\\packages\\org.k2fsa.sherpa.onnx.runtime.linux-arm64\\1.12.28\\org.k2fsa.sherpa.onnx.runtime.linux-arm64.1.12.28.nupkg.sha512",
+    "C:\\Users\\dwayn\\.nuget\\packages\\org.k2fsa.sherpa.onnx.runtime.linux-x64\\1.12.28\\org.k2fsa.sherpa.onnx.runtime.linux-x64.1.12.28.nupkg.sha512",
+    "C:\\Users\\dwayn\\.nuget\\packages\\org.k2fsa.sherpa.onnx.runtime.osx-arm64\\1.12.28\\org.k2fsa.sherpa.onnx.runtime.osx-arm64.1.12.28.nupkg.sha512",
+    "C:\\Users\\dwayn\\.nuget\\packages\\org.k2fsa.sherpa.onnx.runtime.osx-x64\\1.12.28\\org.k2fsa.sherpa.onnx.runtime.osx-x64.1.12.28.nupkg.sha512",
+    "C:\\Users\\dwayn\\.nuget\\packages\\org.k2fsa.sherpa.onnx.runtime.win-arm64\\1.12.28\\org.k2fsa.sherpa.onnx.runtime.win-arm64.1.12.28.nupkg.sha512",
+    "C:\\Users\\dwayn\\.nuget\\packages\\org.k2fsa.sherpa.onnx.runtime.win-x64\\1.12.28\\org.k2fsa.sherpa.onnx.runtime.win-x64.1.12.28.nupkg.sha512",
+    "C:\\Users\\dwayn\\.nuget\\packages\\org.k2fsa.sherpa.onnx.runtime.win-x86\\1.12.28\\org.k2fsa.sherpa.onnx.runtime.win-x86.1.12.28.nupkg.sha512",
     "C:\\Users\\dwayn\\.nuget\\packages\\skiasharp\\2.88.7\\skiasharp.2.88.7.nupkg.sha512",
     "C:\\Users\\dwayn\\.nuget\\packages\\skiasharp.nativeassets.linux\\2.88.7\\skiasharp.nativeassets.linux.2.88.7.nupkg.sha512",
     "C:\\Users\\dwayn\\.nuget\\packages\\skiasharp.nativeassets.macos\\2.88.7\\skiasharp.nativeassets.macos.2.88.7.nupkg.sha512",
@@ -29,12 +46,15 @@
     "C:\\Users\\dwayn\\.nuget\\packages\\system.componentmodel.annotations\\4.5.0\\system.componentmodel.annotations.4.5.0.nupkg.sha512",
     "C:\\Users\\dwayn\\.nuget\\packages\\system.io.pipelines\\6.0.0\\system.io.pipelines.6.0.0.nupkg.sha512",
     "C:\\Users\\dwayn\\.nuget\\packages\\system.numerics.vectors\\4.5.0\\system.numerics.vectors.4.5.0.nupkg.sha512",
+    "C:\\Users\\dwayn\\.nuget\\packages\\system.security.accesscontrol\\4.7.0\\system.security.accesscontrol.4.7.0.nupkg.sha512",
+    "C:\\Users\\dwayn\\.nuget\\packages\\system.security.principal.windows\\4.7.0\\system.security.principal.windows.4.7.0.nupkg.sha512",
     "C:\\Users\\dwayn\\.nuget\\packages\\tmds.dbus.protocol\\0.15.0\\tmds.dbus.protocol.0.15.0.nupkg.sha512",
     "C:\\Users\\dwayn\\.nuget\\packages\\uglytoad.pdfpig\\1.7.0-custom-5\\uglytoad.pdfpig.1.7.0-custom-5.nupkg.sha512",
     "C:\\Users\\dwayn\\.nuget\\packages\\uglytoad.pdfpig.core\\1.7.0-custom-5\\uglytoad.pdfpig.core.1.7.0-custom-5.nupkg.sha512",
     "C:\\Users\\dwayn\\.nuget\\packages\\uglytoad.pdfpig.fonts\\1.7.0-custom-5\\uglytoad.pdfpig.fonts.1.7.0-custom-5.nupkg.sha512",
     "C:\\Users\\dwayn\\.nuget\\packages\\uglytoad.pdfpig.tokenization\\1.7.0-custom-5\\uglytoad.pdfpig.tokenization.1.7.0-custom-5.nupkg.sha512",
-    "C:\\Users\\dwayn\\.nuget\\packages\\uglytoad.pdfpig.tokens\\1.7.0-custom-5\\uglytoad.pdfpig.tokens.1.7.0-custom-5.nupkg.sha512"
+    "C:\\Users\\dwayn\\.nuget\\packages\\uglytoad.pdfpig.tokens\\1.7.0-custom-5\\uglytoad.pdfpig.tokens.1.7.0-custom-5.nupkg.sha512",
+    "C:\\Users\\dwayn\\.nuget\\packages\\microsoft.windows.sdk.net.ref\\10.0.19041.57\\microsoft.windows.sdk.net.ref.10.0.19041.57.nupkg.sha512"
   ],
   "logs": []
 }

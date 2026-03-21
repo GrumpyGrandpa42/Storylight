@@ -153,13 +153,16 @@ public sealed class DocumentImportService : IDocumentImporter
             throw new InvalidDataException("No readable sections were found in the EPUB.");
         }
 
+        var coverImageData = await TryReadEpubCoverAsync(archive, packageDocument, manifest, packageDirectory, cancellationToken);
+
         return new NormalizedDocument
         {
             SourcePath = path,
             Metadata = new DocumentMetadata(
                 string.IsNullOrWhiteSpace(title) ? Path.GetFileNameWithoutExtension(path) : title,
                 author,
-                DocumentFormat.Epub),
+                DocumentFormat.Epub,
+                coverImageData),
             Sections = sections
         };
     }
@@ -218,6 +221,75 @@ public sealed class DocumentImportService : IDocumentImporter
         await using var stream = entry.Open();
         using var reader = new StreamReader(stream);
         return await reader.ReadToEndAsync(cancellationToken);
+    }
+
+    private static async Task<byte[]?> TryReadEpubCoverAsync(
+        ZipArchive archive,
+        XDocument packageDocument,
+        IReadOnlyDictionary<string, string> manifest,
+        string packageDirectory,
+        CancellationToken cancellationToken)
+    {
+        var manifestItems = packageDocument
+            .Descendants()
+            .Where(element => element.Name.LocalName == "item")
+            .ToList();
+
+        var coverId = packageDocument
+            .Descendants()
+            .FirstOrDefault(element =>
+                element.Name.LocalName == "meta"
+                && string.Equals(element.Attribute("name")?.Value, "cover", StringComparison.OrdinalIgnoreCase))
+            ?.Attribute("content")
+            ?.Value;
+
+        string? coverHref = null;
+
+        if (!string.IsNullOrWhiteSpace(coverId) && manifest.TryGetValue(coverId, out var hrefFromMeta))
+        {
+            coverHref = hrefFromMeta;
+        }
+
+        if (string.IsNullOrWhiteSpace(coverHref))
+        {
+            coverHref = manifestItems
+                .FirstOrDefault(item =>
+                    item.Attribute("properties")?.Value?.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                        .Contains("cover-image", StringComparer.OrdinalIgnoreCase) == true)
+                ?.Attribute("href")
+                ?.Value;
+        }
+
+        if (string.IsNullOrWhiteSpace(coverHref))
+        {
+            coverHref = manifestItems
+                .FirstOrDefault(item =>
+                {
+                    var id = item.Attribute("id")?.Value;
+                    var href = item.Attribute("href")?.Value;
+                    return (!string.IsNullOrWhiteSpace(id) && id.Contains("cover", StringComparison.OrdinalIgnoreCase))
+                        || (!string.IsNullOrWhiteSpace(href) && href.Contains("cover", StringComparison.OrdinalIgnoreCase));
+                })
+                ?.Attribute("href")
+                ?.Value;
+        }
+
+        if (string.IsNullOrWhiteSpace(coverHref))
+        {
+            return null;
+        }
+
+        var entryPath = CombineArchivePath(packageDirectory, coverHref);
+        var entry = archive.GetEntry(entryPath);
+        if (entry is null)
+        {
+            return null;
+        }
+
+        await using var stream = entry.Open();
+        using var memoryStream = new MemoryStream();
+        await stream.CopyToAsync(memoryStream, cancellationToken);
+        return memoryStream.ToArray();
     }
 
     private static string CombineArchivePath(string baseDirectory, string relativePath)

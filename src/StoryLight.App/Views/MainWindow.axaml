@@ -8,19 +8,21 @@
         Height="860"
         MinWidth="1080"
         MinHeight="720"
+        Icon="avares://StoryLight.App/Assets/Icon.png"
         Title="StoryLight">
   <Grid RowDefinitions="Auto,*,Auto" Background="#E9DFC8">
     <Border Grid.Row="0" Background="#E1D3B5" BorderBrush="#C7B89C" BorderThickness="0,0,0,1" Padding="18">
-      <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,*,Auto,Auto">
+      <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,*,Auto,Auto">
         <Button Classes="toolbar" Content="Import" Command="{Binding ImportDocumentCommand}" />
         <Button Classes="toolbar" Grid.Column="1" Margin="8,0,0,0" Content="Open" Command="{Binding OpenSelectedCommand}" />
         <Button Classes="toolbar" Grid.Column="2" Margin="8,0,0,0" Content="Remove" Command="{Binding RemoveSelectedCommand}" />
-        <Button Classes="toolbar" Grid.Column="3" Margin="16,0,0,0" Content="Previous" Command="{Binding PreviousPageCommand}" />
-        <Button Classes="toolbar" Grid.Column="4" Margin="8,0,0,0" Content="Next" Command="{Binding NextPageCommand}" />
-        <Button Classes="toolbar" Grid.Column="5" Margin="16,0,0,0" Content="A-" Command="{Binding ZoomOutCommand}" />
-        <Button Classes="toolbar" Grid.Column="6" Margin="8,0,0,0" Content="A+" Command="{Binding ZoomInCommand}" />
-        <TextBlock Grid.Column="7" Margin="12,0,0,0" Text="{Binding ZoomDisplay}" VerticalAlignment="Center" FontWeight="SemiBold" />
-        <StackPanel Grid.Column="9" Orientation="Horizontal" Spacing="8" IsEnabled="{Binding IsTextToSpeechAvailable}">
+        <Button Classes="toolbar" Grid.Column="3" Margin="8,0,0,0" Content="Delete EPUB" Command="{Binding DeleteSavedEpubCommand}" />
+        <Button Classes="toolbar" Grid.Column="4" Margin="16,0,0,0" Content="Previous" Command="{Binding PreviousPageCommand}" />
+        <Button Classes="toolbar" Grid.Column="5" Margin="8,0,0,0" Content="Next" Command="{Binding NextPageCommand}" />
+        <Button Classes="toolbar" Grid.Column="6" Margin="16,0,0,0" Content="A-" Command="{Binding ZoomOutCommand}" />
+        <Button Classes="toolbar" Grid.Column="7" Margin="8,0,0,0" Content="A+" Command="{Binding ZoomInCommand}" />
+        <TextBlock Grid.Column="8" Margin="12,0,0,0" Text="{Binding ZoomDisplay}" VerticalAlignment="Center" FontWeight="SemiBold" />
+        <StackPanel Grid.Column="10" Orientation="Horizontal" Spacing="8" IsEnabled="{Binding IsTextToSpeechAvailable}">
           <ComboBox Width="76" ItemsSource="{Binding SpeechRates}" SelectedItem="{Binding SpeechRate}" />
           <Button Classes="toolbar" Content="Read" Command="{Binding ReadAloudCommand}" />
           <Button Classes="toolbar" Content="Pause" Command="{Binding PauseSpeechCommand}" />
@@ -45,12 +47,26 @@
             <ListBox.ItemTemplate>
               <DataTemplate>
                 <Border Background="#FFF9ED" BorderBrush="#D5C6A8" BorderThickness="1" CornerRadius="10" Margin="0,0,0,10" Padding="10">
-                  <StackPanel Spacing="4">
-                    <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap" />
-                    <TextBlock Text="{Binding Subtitle}" Foreground="#6B5B45" FontSize="12" TextWrapping="Wrap" />
-                    <TextBlock Text="{Binding ProgressText}" FontSize="12" FontWeight="SemiBold" />
-                    <TextBlock Text="{Binding LastOpenedDisplay}" FontSize="11" Foreground="#8B7758" />
-                  </StackPanel>
+                  <Grid ColumnDefinitions="72,*">
+                    <Border Width="72" Height="100" CornerRadius="8" Background="#E6D9BD" BorderBrush="#C9BA9C" BorderThickness="1">
+                      <Grid>
+                        <Image Source="{Binding CoverBitmap}" Stretch="UniformToFill" IsVisible="{Binding HasCoverImage}" />
+                        <TextBlock Text="{Binding FormatLabel}"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   FontWeight="Bold"
+                                   Foreground="#7A6548"
+                                   IsVisible="{Binding HasNoCoverImage}" />
+                      </Grid>
+                    </Border>
+
+                    <StackPanel Grid.Column="1" Margin="10,0,0,0" Spacing="4">
+                      <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                      <TextBlock Text="{Binding Subtitle}" Foreground="#6B5B45" FontSize="12" TextWrapping="Wrap" />
+                      <TextBlock Text="{Binding ProgressText}" FontSize="12" FontWeight="SemiBold" />
+                      <TextBlock Text="{Binding LastOpenedDisplay}" FontSize="11" Foreground="#8B7758" />
+                    </StackPanel>
+                  </Grid>
                 </Border>
               </DataTemplate>
             </ListBox.ItemTemplate>
@@ -66,7 +82,7 @@
 
         <Grid Grid.Row="1" RowDefinitions="Auto,*" Margin="0,18,0,18">
           <Grid ColumnDefinitions="*,Auto">
-            <TextBlock Text="{Binding PageTitle}" FontSize="18" FontWeight="SemiBold" />
+            <TextBlock Text="{Binding PageTitle}" FontSize="18" FontWeight="SemiBold" IsVisible="{Binding HasPageTitle}" />
             <TextBlock Grid.Column="1" Text="{Binding PageStatus}" FontWeight="SemiBold" Foreground="#6B5B45" />
           </Grid>
 

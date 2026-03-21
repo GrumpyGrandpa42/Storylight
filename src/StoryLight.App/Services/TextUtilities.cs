@@ -42,12 +42,15 @@ internal static partial class TextUtilities
         {
             var document = XDocument.Parse(html, LoadOptions.PreserveWhitespace);
             var builder = new StringBuilder();
-            AppendNodeText(document.Root, builder);
+            var startNode = document.Descendants().FirstOrDefault(element => element.Name.LocalName == "body") ?? document.Root;
+            AppendNodeText(startNode, builder);
             return NormalizeText(WebUtility.HtmlDecode(builder.ToString()));
         }
         catch
         {
-            var text = HtmlTagRegex().Replace(html, " ");
+            var withoutHead = HtmlHeadRegex().Replace(html, " ");
+            var withoutScripts = HtmlScriptOrStyleRegex().Replace(withoutHead, " ");
+            var text = HtmlTagRegex().Replace(withoutScripts, " ");
             text = WebUtility.HtmlDecode(text);
             return NormalizeText(text);
         }
@@ -129,4 +132,10 @@ internal static partial class TextUtilities
 
     [GeneratedRegex(@"<[^>]+>", RegexOptions.Compiled)]
     private static partial Regex HtmlTagRegex();
+
+    [GeneratedRegex(@"<head\b[^>]*>[\s\S]*?</head>", RegexOptions.Compiled | RegexOptions.IgnoreCase)]
+    private static partial Regex HtmlHeadRegex();
+
+    [GeneratedRegex(@"<(script|style)\b[^>]*>[\s\S]*?</\1>", RegexOptions.Compiled | RegexOptions.IgnoreCase)]
+    private static partial Regex HtmlScriptOrStyleRegex();
 }

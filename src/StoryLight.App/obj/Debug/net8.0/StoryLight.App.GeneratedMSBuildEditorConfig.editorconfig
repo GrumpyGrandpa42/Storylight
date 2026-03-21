@@ -24,5 +24,8 @@ build_property.EnableCodeStyleSeverity =
 [C:/Repos/StoryLight/src/StoryLight.App/App.axaml]
 build_metadata.AdditionalFiles.SourceItemGroup = AvaloniaXaml
 
+[C:/Repos/StoryLight/src/StoryLight.App/Views/LoadingWindow.axaml]
+build_metadata.AdditionalFiles.SourceItemGroup = AvaloniaXaml
+
 [C:/Repos/StoryLight/src/StoryLight.App/Views/MainWindow.axaml]
 build_metadata.AdditionalFiles.SourceItemGroup = AvaloniaXaml

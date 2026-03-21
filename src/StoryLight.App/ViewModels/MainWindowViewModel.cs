@@ -42,6 +42,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         ImportDocumentCommand = new RelayCommand(async () => await ImportDocumentAsync(), () => !IsBusy);
         OpenSelectedCommand = new RelayCommand(async () => await OpenSelectedAsync(), () => !IsBusy && SelectedLibraryItem is not null);
         RemoveSelectedCommand = new RelayCommand(RemoveSelected, () => !IsBusy && SelectedLibraryItem is not null);
+        DeleteSavedEpubCommand = new RelayCommand(DeleteSavedEpub, CanDeleteSelectedEpub);
         PreviousPageCommand = new RelayCommand(() => ChangePage(-1), () => CurrentPageIndex > 0);
         NextPageCommand = new RelayCommand(() => ChangePage(1), () => CurrentPageIndex < PageCount - 1);
         ZoomInCommand = new RelayCommand(() => ChangeZoom(0.1), () => ZoomLevel < 2.0);
@@ -73,7 +74,13 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     public string PageTitle
     {
         get => _pageTitle;
-        private set => SetProperty(ref _pageTitle, value);
+        private set
+        {
+            if (SetProperty(ref _pageTitle, value))
+            {
+                RaisePropertyChanged(nameof(HasPageTitle));
+            }
+        }
     }
 
     public string PageText
@@ -139,6 +146,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
     public int PageCount => _pages.Count;
 
+    public bool HasPageTitle => !string.IsNullOrWhiteSpace(PageTitle);
+
     public string PageStatus => _pages.Count == 0
         ? "No pages"
         : $"Page {CurrentPageNumber} of {PageCount}";
@@ -172,6 +181,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     public RelayCommand ImportDocumentCommand { get; }
     public RelayCommand OpenSelectedCommand { get; }
     public RelayCommand RemoveSelectedCommand { get; }
+    public RelayCommand DeleteSavedEpubCommand { get; }
     public RelayCommand PreviousPageCommand { get; }
     public RelayCommand NextPageCommand { get; }
     public RelayCommand ZoomInCommand { get; }
@@ -305,6 +315,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
                 Format = document.Metadata.Format,
                 Title = document.Metadata.Title,
                 Subtitle = document.Metadata.Author ?? Path.GetFileName(document.SourcePath),
+                CoverImageData = document.Metadata.CoverImageData,
                 LastOpenedUtc = DateTimeOffset.UtcNow
             };
 
@@ -315,6 +326,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         {
             existing.Title = document.Metadata.Title;
             existing.Subtitle = document.Metadata.Author ?? Path.GetFileName(document.SourcePath);
+            existing.CoverImageData = document.Metadata.CoverImageData;
             existing.LastOpenedUtc = DateTimeOffset.UtcNow;
             existing.RefreshDerivedProperties();
 
@@ -336,24 +348,33 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         }
 
         var item = SelectedLibraryItem;
-        LibraryItems.Remove(item);
-        _appState.Library.Remove(item);
-        _appState.ReadingPositions.RemoveAll(position => position.DocumentId == item.Id);
+        RemoveItemFromLibrary(item);
+        Status = $"Removed {item.Title} from the library.";
+    }
 
-        if (_currentDocument?.SourcePath.Equals(item.SourcePath, StringComparison.OrdinalIgnoreCase) == true)
+    private void DeleteSavedEpub()
+    {
+        if (SelectedLibraryItem is null || !CanDeleteSelectedEpub())
         {
-            _currentDocument = null;
-            _pages.Clear();
-            CurrentPageIndex = 0;
-            PageTitle = "No document open";
-            PageText = "Your reading page will appear here.";
-            DocumentTitle = "StoryLight";
-            DocumentSubtitle = "Import a book or document to begin reading.";
+            return;
         }
 
-        SelectedLibraryItem = LibraryItems.FirstOrDefault();
-        _ = PersistStateAsync();
-        Status = $"Removed {item.Title} from the library.";
+        var item = SelectedLibraryItem;
+
+        try
+        {
+            if (File.Exists(item.SourcePath))
+            {
+                File.Delete(item.SourcePath);
+            }
+
+            RemoveItemFromLibrary(item);
+            Status = $"Deleted saved EPUB: {item.Title}.";
+        }
+        catch (Exception ex)
+        {
+            Status = $"Unable to delete EPUB: {ex.Message}";
+        }
     }
 
     private void ChangePage(int delta)
@@ -432,7 +453,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         }
 
         var page = _pages[CurrentPageIndex];
-        PageTitle = page.Title;
+        PageTitle = ShouldHidePageTitle(page) ? string.Empty : page.Title;
         PageText = page.Text;
 
         if (SelectedLibraryItem is not null)
@@ -626,10 +647,28 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         return 0;
     }
 
+    private static bool ShouldHidePageTitle(ReaderPage page)
+    {
+        if (string.IsNullOrWhiteSpace(page.Title) || string.IsNullOrWhiteSpace(page.Text))
+        {
+            return true;
+        }
+
+        var normalizedTitle = NormalizeComparisonText(page.Title);
+        var normalizedText = NormalizeComparisonText(page.Text);
+        return normalizedText.StartsWith(normalizedTitle, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string NormalizeComparisonText(string text)
+    {
+        return string.Concat(text.Where(char.IsLetterOrDigit)).ToUpperInvariant();
+    }
+
     private void RefreshCommandStates()
     {
         OpenSelectedCommand.RaiseCanExecuteChanged();
         RemoveSelectedCommand.RaiseCanExecuteChanged();
+        DeleteSavedEpubCommand.RaiseCanExecuteChanged();
         PreviousPageCommand.RaiseCanExecuteChanged();
         NextPageCommand.RaiseCanExecuteChanged();
         ZoomInCommand.RaiseCanExecuteChanged();
@@ -639,5 +678,35 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         ResumeSpeechCommand.RaiseCanExecuteChanged();
         StopSpeechCommand.RaiseCanExecuteChanged();
         ImportDocumentCommand.RaiseCanExecuteChanged();
+    }
+
+    private bool CanDeleteSelectedEpub()
+    {
+        return !IsBusy
+            && SelectedLibraryItem is not null
+            && SelectedLibraryItem.Format == DocumentFormat.Epub
+            && SelectedLibraryItem.SourcePath.EndsWith(".epub", StringComparison.OrdinalIgnoreCase)
+            && File.Exists(SelectedLibraryItem.SourcePath);
+    }
+
+    private void RemoveItemFromLibrary(LibraryItem item)
+    {
+        LibraryItems.Remove(item);
+        _appState.Library.Remove(item);
+        _appState.ReadingPositions.RemoveAll(position => position.DocumentId == item.Id);
+
+        if (_currentDocument?.SourcePath.Equals(item.SourcePath, StringComparison.OrdinalIgnoreCase) == true)
+        {
+            _currentDocument = null;
+            _pages.Clear();
+            CurrentPageIndex = 0;
+            PageTitle = "No document open";
+            PageText = "Your reading page will appear here.";
+            DocumentTitle = "StoryLight";
+            DocumentSubtitle = "Import a book or document to begin reading.";
+        }
+
+        SelectedLibraryItem = LibraryItems.FirstOrDefault();
+        _ = PersistStateAsync();
     }
 }

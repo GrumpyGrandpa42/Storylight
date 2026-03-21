@@ -13,4 +13,9 @@
     <PackageReference Include="Avalonia.Themes.Simple" Version="11.0.10" />
     <PackageReference Include="UglyToad.PdfPig" Version="1.7.0-custom-5" />
   </ItemGroup>
+
+  <ItemGroup>
+    <AvaloniaResource Include="Assets\Icon.png" />
+    <AvaloniaResource Include="Assets\Loading.png" />
+  </ItemGroup>
 </Project>

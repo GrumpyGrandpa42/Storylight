@@ -1,0 +1,42 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        x:Class="StoryLight.App.Views.LoadingWindow"
+        Width="720"
+        Height="420"
+        CanResize="False"
+        SystemDecorations="None"
+        ShowInTaskbar="True"
+        WindowStartupLocation="CenterScreen"
+        Background="#1E1912"
+        Icon="avares://StoryLight.App/Assets/Icon.png"
+        Title="StoryLight">
+  <Border Background="#201A13" Padding="28">
+    <Grid RowDefinitions="*,Auto,Auto">
+      <Image x:Name="LoadingImage"
+             Source="avares://StoryLight.App/Assets/Loading.png"
+             Width="560"
+             Height="260"
+             Stretch="Uniform"
+             HorizontalAlignment="Center"
+             VerticalAlignment="Center" />
+
+      <TextBlock Grid.Row="1"
+                 Margin="0,18,0,0"
+                 HorizontalAlignment="Center"
+                 Text="StoryLight"
+                 FontSize="28"
+                 FontWeight="Bold"
+                 Foreground="#F6E7C8" />
+
+      <TextBlock Grid.Row="2"
+                 Margin="0,8,0,0"
+                 HorizontalAlignment="Center"
+                 Text="Loading your library..."
+                 FontSize="15"
+                 Foreground="#CDB997" />
+    </Grid>
+  </Border>
+</Window>

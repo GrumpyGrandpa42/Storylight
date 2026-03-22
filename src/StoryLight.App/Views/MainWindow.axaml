@@ -175,9 +175,20 @@
             <Button Classes="icon"
                     Width="48"
                     Height="48"
-                    FontSize="20"
-                    Content="♫"
                     ToolTip.Tip="Voice controls">
+              <Grid Width="22" Height="22">
+                <Path Data="M2,9 L7,9 L12,4 L12,18 L7,13 L2,13 Z"
+                      Fill="#2D241A"
+                      Stretch="Fill" />
+                <Path Data="M15,8 C17,10 17,12 15,14"
+                      Stroke="#2D241A"
+                      StrokeThickness="1.7"
+                      StrokeLineCap="Round" />
+                <Path Data="M17.5,5.5 C21.5,9 21.5,13 17.5,16.5"
+                      Stroke="#2D241A"
+                      StrokeThickness="1.7"
+                      StrokeLineCap="Round" />
+              </Grid>
               <Button.Flyout>
                 <Flyout Placement="LeftEdgeAlignedTop">
                   <Border Classes="voiceFlyout" Padding="16">

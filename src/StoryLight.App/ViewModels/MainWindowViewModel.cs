@@ -305,6 +305,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
                 LibraryItems.Add(item);
             }
 
+            SelectedLibraryItem = LibraryItems.FirstOrDefault();
             _isLibraryCollapsed = _appState.IsLibraryCollapsed;
             RaisePropertyChanged(nameof(IsLibraryCollapsed));
             RaisePropertyChanged(nameof(IsLibraryVisible));
@@ -315,9 +316,14 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             RaisePropertyChanged(nameof(ContinueToNextPage));
             await _textToSpeechService.InitializeAsync(_appState.Speech);
             await ReloadTtsOptionsAsync();
-            Status = _textToSpeechService.IsAvailable
-                ? LibraryItems.Count == 0 ? "Ready. Import a document to begin." : "Library restored."
-                : _textToSpeechService.StatusSummary;
+
+            var restoredCollapsedSession = await RestoreCollapsedReadingSessionAsync();
+            if (!restoredCollapsedSession)
+            {
+                Status = _textToSpeechService.IsAvailable
+                    ? LibraryItems.Count == 0 ? "Ready. Import a document to begin." : "Library restored."
+                    : _textToSpeechService.StatusSummary;
+            }
         }
         catch (Exception ex)
         {
@@ -346,7 +352,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         await OpenDocumentAsync(SelectedLibraryItem.SourcePath);
     }
 
-    private async Task OpenDocumentAsync(string path)
+    private async Task<bool> OpenDocumentAsync(string path)
     {
         IsBusy = true;
         Status = "Importing document...";
@@ -356,7 +362,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             if (!File.Exists(path))
             {
                 Status = "The selected file no longer exists.";
-                return;
+                return false;
             }
 
             var document = await _documentImporter.ImportAsync(path);
@@ -388,10 +394,12 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
             await PersistStateAsync();
             Status = $"Opened {Path.GetFileName(path)}.";
+            return true;
         }
         catch (Exception ex)
         {
             Status = $"Unable to open document: {ex.Message}";
+            return false;
         }
         finally
         {
@@ -772,6 +780,38 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         }
 
         await _stateStore.SaveAsync(_appState);
+    }
+
+    private async Task<bool> RestoreCollapsedReadingSessionAsync()
+    {
+        if (!_appState.IsLibraryCollapsed)
+        {
+            return false;
+        }
+
+        var lastOpenedItem = LibraryItems
+            .Where(item => item.LastOpenedUtc != default && !string.IsNullOrWhiteSpace(item.SourcePath))
+            .OrderByDescending(item => item.LastOpenedUtc)
+            .FirstOrDefault();
+
+        if (lastOpenedItem is null)
+        {
+            IsLibraryCollapsed = false;
+            Status = "Reopened the library because no previous book could be restored.";
+            return true;
+        }
+
+        SelectedLibraryItem = lastOpenedItem;
+
+        if (await OpenDocumentAsync(lastOpenedItem.SourcePath))
+        {
+            Status = $"Restored {lastOpenedItem.Title}.";
+            return true;
+        }
+
+        IsLibraryCollapsed = false;
+        Status = $"{Status} Reopened the library.";
+        return true;
     }
 
     private async Task<string?> PickFileAsync()

@@ -11,9 +11,11 @@ internal static partial class TextUtilities
     {
         var normalized = text
             .Replace("\r\n", "\n", StringComparison.Ordinal)
-            .Replace('\r', '\n');
+            .Replace('\r', '\n')
+            .Replace('\u00A0', ' ');
 
         normalized = Regex.Replace(normalized, @"[ \t]+\n", "\n");
+        normalized = Regex.Replace(normalized, @"\n[ \t]+", "\n");
         normalized = Regex.Replace(normalized, @"\n{3,}", "\n\n");
         return normalized.Trim();
     }

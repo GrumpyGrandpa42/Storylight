@@ -1,5 +1,4 @@
 using NAudio.Wave;
-using NAudio.Wave.SampleProviders;
 using StoryLight.App.Models;
 using Windows.Media.SpeechSynthesis;
 using Windows.Storage.Streams;
@@ -8,24 +7,27 @@ namespace StoryLight.App.Services;
 
 public sealed class WindowsSpeechService : ITextToSpeechService
 {
-    private static readonly TimeSpan LeadInDuration = TimeSpan.FromMilliseconds(250);
+    private static readonly TimeSpan InitialLeadInDuration = TimeSpan.FromMilliseconds(120);
 
     public event EventHandler? PlaybackCompleted;
 
     private readonly SemaphoreSlim _mutex = new(1, 1);
+    private readonly List<PreparedSpeech> _preparedSpeechCache = new();
+    private readonly Queue<SpeechRequestKey> _playbackSequence = new();
+    private readonly List<PrefetchRequest> _prefetchQueue = new();
     private SpeechSynthesizer? _synthesizer;
-    private CancellationTokenSource? _prefetchCts;
-    private CancellationTokenSource? _playbackMonitorCts;
+    private CancellationTokenSource? _prefetchWorkerCts;
+    private Task? _prefetchWorkerTask;
+    private PrefetchRequest? _activePrefetchRequest;
     private WaveOutEvent? _waveOut;
-    private WaveFileReader? _waveReader;
-    private MemoryStream? _audioBuffer;
-    private PreparedSpeech? _preparedSpeech;
+    private QueuedWaveProvider? _queuedWaveProvider;
+    private WaveFormat? _playbackFormat;
     private bool _disposed;
     private int _rate;
     private IReadOnlyList<TtsVoiceInfo> _voices = Array.Empty<TtsVoiceInfo>();
 
     public bool IsAvailable => OperatingSystem.IsWindows() && _voices.Count > 0;
-    public bool IsSpeaking { get; private set; }
+    public bool IsSpeaking => _playbackSequence.Count > 0 && !IsPaused;
     public bool IsPaused { get; private set; }
 
     public int Rate
@@ -73,7 +75,7 @@ public sealed class WindowsSpeechService : ITextToSpeechService
             if (_voices.Count == 0)
             {
                 SelectedVoiceId = null;
-                _preparedSpeech = null;
+                CancelPrefetchCore(clearPreparedSpeech: true);
                 return;
             }
 
@@ -100,7 +102,7 @@ public sealed class WindowsSpeechService : ITextToSpeechService
         {
             ThrowIfDisposed();
             SelectedVoiceId = _voices.FirstOrDefault(voice => voice.Id == voiceId)?.Id ?? _voices.FirstOrDefault()?.Id;
-            _preparedSpeech = null;
+            CancelPrefetchCore(clearPreparedSpeech: true);
 
             if (_synthesizer is not null)
             {
@@ -120,9 +122,7 @@ public sealed class WindowsSpeechService : ITextToSpeechService
             return;
         }
 
-        string? selectedVoiceId;
-        int selectedRate;
-        CancellationTokenSource prefetchCts;
+        Task completionTask;
 
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -130,64 +130,33 @@ public sealed class WindowsSpeechService : ITextToSpeechService
         try
         {
             ThrowIfDisposed();
-            selectedVoiceId = SelectedVoiceId;
-            selectedRate = Rate;
+            var requestKey = new SpeechRequestKey(SelectedVoiceId, Rate, text);
 
-            if (MatchesPreparedSpeech(selectedVoiceId, selectedRate, text))
+            if (ContainsPreparedSpeechCore(requestKey))
             {
                 return;
             }
 
-            CancelPrefetchCore();
-            prefetchCts = new CancellationTokenSource();
-            _prefetchCts = prefetchCts;
+            if (TryGetPendingPrefetchCore(requestKey, out var existingRequest))
+            {
+                completionTask = existingRequest.Completion.Task;
+            }
+            else
+            {
+                var request = new PrefetchRequest(
+                    requestKey,
+                    new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously));
+                _prefetchQueue.Add(request);
+                completionTask = request.Completion.Task;
+                EnsurePrefetchWorkerCore();
+            }
         }
         finally
         {
             _mutex.Release();
         }
 
-        try
-        {
-            using var synthesizer = CreateConfiguredSynthesizer(selectedVoiceId, selectedRate);
-            using var stream = await synthesizer.SynthesizeTextToStreamAsync(text);
-            var audioBytes = await ReadSpeechBytesAsync(stream, cancellationToken);
-
-            await _mutex.WaitAsync(cancellationToken);
-            try
-            {
-                if (prefetchCts.IsCancellationRequested || !ReferenceEquals(_prefetchCts, prefetchCts))
-                {
-                    return;
-                }
-
-                _preparedSpeech = new PreparedSpeech(selectedVoiceId, selectedRate, text, audioBytes);
-                _prefetchCts = null;
-            }
-            finally
-            {
-                _mutex.Release();
-            }
-        }
-        catch
-        {
-            await _mutex.WaitAsync(CancellationToken.None);
-            try
-            {
-                if (ReferenceEquals(_prefetchCts, prefetchCts))
-                {
-                    _prefetchCts = null;
-                }
-            }
-            finally
-            {
-                _mutex.Release();
-            }
-        }
-        finally
-        {
-            prefetchCts.Dispose();
-        }
+        await completionTask.WaitAsync(cancellationToken);
     }
 
     public async Task SpeakAsync(string text, CancellationToken cancellationToken = default)
@@ -203,24 +172,22 @@ public sealed class WindowsSpeechService : ITextToSpeechService
         try
         {
             ThrowIfDisposed();
-            CancelPrefetchCore();
             StopPlaybackCore();
 
-            if (MatchesPreparedSpeech(SelectedVoiceId, Rate, text))
+            if (TryTakePreparedSpeechCore(new SpeechRequestKey(SelectedVoiceId, Rate, text), out var preparedSpeech))
             {
-                var preparedAudio = _preparedSpeech!.AudioBytes;
-                _preparedSpeech = null;
-                StartPlayback(preparedAudio);
+                StartPlaybackCore(preparedSpeech, includeLeadIn: true);
                 return;
             }
 
+            CancelPrefetchCore(clearPreparedSpeech: false);
             var synthesizer = EnsureSynthesizer();
             ApplySelectedVoice(synthesizer, SelectedVoiceId);
             ApplyRate(synthesizer, Rate);
 
             using var stream = await synthesizer.SynthesizeTextToStreamAsync(text);
-            var audioBytes = await ReadSpeechBytesAsync(stream, cancellationToken);
-            StartPlayback(audioBytes);
+            var generatedSpeech = await CreatePreparedSpeechAsync(SelectedVoiceId, Rate, text, stream, cancellationToken);
+            StartPlaybackCore(generatedSpeech, includeLeadIn: true);
         }
         finally
         {
@@ -233,13 +200,12 @@ public sealed class WindowsSpeechService : ITextToSpeechService
         await _mutex.WaitAsync();
         try
         {
-            if (_waveOut is null || !IsSpeaking || IsPaused)
+            if (_waveOut is null || _playbackSequence.Count == 0 || IsPaused)
             {
                 return;
             }
 
             _waveOut.Pause();
-            IsSpeaking = false;
             IsPaused = true;
         }
         finally
@@ -253,13 +219,12 @@ public sealed class WindowsSpeechService : ITextToSpeechService
         await _mutex.WaitAsync();
         try
         {
-            if (_waveOut is null || !IsPaused)
+            if (_waveOut is null || _playbackSequence.Count == 0 || !IsPaused)
             {
                 return;
             }
 
             _waveOut.Play();
-            IsSpeaking = true;
             IsPaused = false;
         }
         finally
@@ -273,8 +238,7 @@ public sealed class WindowsSpeechService : ITextToSpeechService
         await _mutex.WaitAsync();
         try
         {
-            CancelPrefetchCore();
-            _preparedSpeech = null;
+            CancelPrefetchCore(clearPreparedSpeech: true);
             StopPlaybackCore();
         }
         finally
@@ -291,9 +255,17 @@ public sealed class WindowsSpeechService : ITextToSpeechService
         }
 
         _disposed = true;
-        CancelPrefetchCore();
-        CancelPlaybackMonitor();
+        CancelPrefetchCore(clearPreparedSpeech: true);
         StopPlaybackCore();
+        CleanupPlaybackResources();
+        try
+        {
+            _prefetchWorkerTask?.GetAwaiter().GetResult();
+        }
+        catch
+        {
+        }
+
         _synthesizer?.Dispose();
         _synthesizer = null;
         _mutex.Dispose();
@@ -343,99 +315,73 @@ public sealed class WindowsSpeechService : ITextToSpeechService
         };
     }
 
-    private void StartPlayback(byte[] audioBytes)
+    private void StartPlaybackCore(PreparedSpeech preparedSpeech, bool includeLeadIn)
     {
-        _audioBuffer = new MemoryStream(audioBytes, writable: false);
-        _waveReader = new WaveFileReader(_audioBuffer);
-        var sampleProvider = new OffsetSampleProvider(_waveReader.ToSampleProvider())
-        {
-            DelayBy = LeadInDuration
-        };
+        var needsLeadIn = includeLeadIn && InitializePlaybackCore(preparedSpeech.AudioFormat);
+        _queuedWaveProvider!.Clear();
+        _playbackSequence.Clear();
 
-        _waveOut = new WaveOutEvent();
-        _waveOut.Init(sampleProvider.ToWaveProvider());
-        _waveOut.Play();
+        var initialAudio = needsLeadIn
+            ? CombineAudioBytes(CreateSilenceBytes(preparedSpeech.AudioFormat, InitialLeadInDuration), preparedSpeech.AudioBytes)
+            : preparedSpeech.AudioBytes;
 
-        _playbackMonitorCts = new CancellationTokenSource();
-        _ = MonitorPlaybackAsync(_waveOut, _playbackMonitorCts.Token);
-        IsSpeaking = true;
+        _queuedWaveProvider.Enqueue(initialAudio);
+        _playbackSequence.Enqueue(preparedSpeech.Key);
+        _waveOut!.Play();
         IsPaused = false;
-    }
-
-    private async Task MonitorPlaybackAsync(WaveOutEvent waveOut, CancellationToken cancellationToken)
-    {
-        try
-        {
-            while (!cancellationToken.IsCancellationRequested)
-            {
-                if (waveOut.PlaybackState == PlaybackState.Stopped)
-                {
-                    await _mutex.WaitAsync(cancellationToken);
-                    try
-                    {
-                        if (ReferenceEquals(_waveOut, waveOut))
-                        {
-                            CleanupPlaybackResources();
-                            IsSpeaking = false;
-                            IsPaused = false;
-                            PlaybackCompleted?.Invoke(this, EventArgs.Empty);
-                        }
-                    }
-                    finally
-                    {
-                        _mutex.Release();
-                    }
-
-                    return;
-                }
-
-                await Task.Delay(50, cancellationToken);
-            }
-        }
-        catch (OperationCanceledException)
-        {
-        }
     }
 
     private void StopPlaybackCore()
     {
-        CancelPlaybackMonitor();
+        _queuedWaveProvider?.Clear();
+        _playbackSequence.Clear();
 
-        try
+        if (_waveOut?.PlaybackState == PlaybackState.Paused)
         {
-            _waveOut?.Stop();
-        }
-        catch
-        {
+            _waveOut.Play();
         }
 
-        CleanupPlaybackResources();
-        IsSpeaking = false;
         IsPaused = false;
     }
 
     private void CleanupPlaybackResources()
     {
+        if (_queuedWaveProvider is not null)
+        {
+            _queuedWaveProvider.SegmentCompleted -= OnPlaybackSegmentCompleted;
+        }
+
+        if (_waveOut is not null)
+        {
+            _waveOut.PlaybackStopped -= OnWaveOutPlaybackStopped;
+        }
+
         _waveOut?.Dispose();
-        _waveReader?.Dispose();
-        _audioBuffer?.Dispose();
         _waveOut = null;
-        _waveReader = null;
-        _audioBuffer = null;
+        _queuedWaveProvider = null;
+        _playbackFormat = null;
+        _playbackSequence.Clear();
     }
 
-    private void CancelPrefetchCore()
+    private void CancelPrefetchCore(bool clearPreparedSpeech)
     {
-        _prefetchCts?.Cancel();
-        _prefetchCts?.Dispose();
-        _prefetchCts = null;
-    }
+        _prefetchWorkerCts?.Cancel();
+        _prefetchWorkerCts?.Dispose();
+        _prefetchWorkerCts = null;
 
-    private void CancelPlaybackMonitor()
-    {
-        _playbackMonitorCts?.Cancel();
-        _playbackMonitorCts?.Dispose();
-        _playbackMonitorCts = null;
+        foreach (var queuedRequest in _prefetchQueue)
+        {
+            queuedRequest.Completion.TrySetCanceled();
+        }
+
+        _prefetchQueue.Clear();
+        _activePrefetchRequest?.Completion.TrySetCanceled();
+        _activePrefetchRequest = null;
+
+        if (clearPreparedSpeech)
+        {
+            ClearPreparedSpeechCacheCore();
+        }
     }
 
     private static async Task<byte[]> ReadSpeechBytesAsync(SpeechSynthesisStream stream, CancellationToken cancellationToken)
@@ -456,12 +402,304 @@ public sealed class WindowsSpeechService : ITextToSpeechService
             : $"{voice.DisplayName} ({voice.Language})";
     }
 
-    private bool MatchesPreparedSpeech(string? voiceId, int rate, string text)
+    private void EnsurePrefetchWorkerCore()
     {
-        return _preparedSpeech is not null
-            && string.Equals(_preparedSpeech.VoiceId, voiceId, StringComparison.OrdinalIgnoreCase)
-            && _preparedSpeech.Rate == rate
-            && string.Equals(_preparedSpeech.Text, text, StringComparison.Ordinal);
+        if (_prefetchWorkerTask is { IsCompleted: false })
+        {
+            return;
+        }
+
+        _prefetchWorkerCts?.Dispose();
+        _prefetchWorkerCts = new CancellationTokenSource();
+        _prefetchWorkerTask = ProcessPrefetchQueueAsync(_prefetchWorkerCts.Token);
+    }
+
+    private async Task ProcessPrefetchQueueAsync(CancellationToken cancellationToken)
+    {
+        while (true)
+        {
+            PrefetchRequest request;
+
+            await _mutex.WaitAsync(CancellationToken.None);
+            try
+            {
+                if (cancellationToken.IsCancellationRequested || _disposed)
+                {
+                    return;
+                }
+
+                if (_prefetchQueue.Count == 0)
+                {
+                    _activePrefetchRequest = null;
+                    return;
+                }
+
+                request = _prefetchQueue[0];
+                _prefetchQueue.RemoveAt(0);
+                _activePrefetchRequest = request;
+
+                if (ContainsPreparedSpeechCore(request.Key))
+                {
+                    request.Completion.TrySetResult();
+                    _activePrefetchRequest = null;
+                    continue;
+                }
+            }
+            finally
+            {
+                _mutex.Release();
+            }
+
+            try
+            {
+                using var synthesizer = CreateConfiguredSynthesizer(request.Key.VoiceId, request.Key.Rate);
+                using var stream = await synthesizer.SynthesizeTextToStreamAsync(request.Key.Text);
+                var preparedSpeech = await CreatePreparedSpeechAsync(
+                    request.Key.VoiceId,
+                    request.Key.Rate,
+                    request.Key.Text,
+                    stream,
+                    CancellationToken.None);
+
+                await _mutex.WaitAsync(CancellationToken.None);
+                try
+                {
+                    if (cancellationToken.IsCancellationRequested || _disposed)
+                    {
+                        request.Completion.TrySetCanceled();
+                        return;
+                    }
+
+                    StorePreparedSpeechCore(preparedSpeech);
+                    TryQueuePreparedSpeechCore(preparedSpeech);
+                    request.Completion.TrySetResult();
+                    _activePrefetchRequest = null;
+                }
+                finally
+                {
+                    _mutex.Release();
+                }
+            }
+            catch (Exception ex)
+            {
+                await _mutex.WaitAsync(CancellationToken.None);
+                try
+                {
+                    request.Completion.TrySetException(ex);
+                    _activePrefetchRequest = null;
+                }
+                finally
+                {
+                    _mutex.Release();
+                }
+            }
+        }
+    }
+
+    private bool TryGetPendingPrefetchCore(SpeechRequestKey key, out PrefetchRequest request)
+    {
+        if (_activePrefetchRequest is not null && _activePrefetchRequest.Key == key)
+        {
+            request = _activePrefetchRequest;
+            return true;
+        }
+
+        var existingRequest = _prefetchQueue.FirstOrDefault(candidate => candidate.Key == key);
+        if (existingRequest is not null)
+        {
+            request = existingRequest;
+            return true;
+        }
+
+        request = null!;
+        return false;
+    }
+
+    private bool ContainsPreparedSpeechCore(SpeechRequestKey key)
+    {
+        return _preparedSpeechCache.Any(candidate => candidate.Key == key);
+    }
+
+    private bool TryTakePreparedSpeechCore(SpeechRequestKey key, out PreparedSpeech preparedSpeech)
+    {
+        var index = _preparedSpeechCache.FindIndex(candidate => candidate.Key == key);
+        if (index >= 0)
+        {
+            preparedSpeech = _preparedSpeechCache[index];
+            _preparedSpeechCache.RemoveAt(index);
+            return true;
+        }
+
+        preparedSpeech = null!;
+        return false;
+    }
+
+    private void StorePreparedSpeechCore(PreparedSpeech preparedSpeech)
+    {
+        _preparedSpeechCache.RemoveAll(candidate => candidate.Key == preparedSpeech.Key);
+        _preparedSpeechCache.Add(preparedSpeech);
+
+        while (_preparedSpeechCache.Count > 2)
+        {
+            _preparedSpeechCache.RemoveAt(0);
+        }
+    }
+
+    private void ClearPreparedSpeechCacheCore()
+    {
+        _preparedSpeechCache.Clear();
+    }
+
+    private bool TryQueuePreparedSpeechCore(PreparedSpeech preparedSpeech)
+    {
+        if (_waveOut is null || _queuedWaveProvider is null || _playbackFormat is null)
+        {
+            return false;
+        }
+
+        if (!WaveFormatMatches(_playbackFormat, preparedSpeech.AudioFormat))
+        {
+            return false;
+        }
+
+        if (_playbackSequence.Contains(preparedSpeech.Key))
+        {
+            return true;
+        }
+
+        _queuedWaveProvider.Enqueue(preparedSpeech.AudioBytes);
+        _playbackSequence.Enqueue(preparedSpeech.Key);
+        return true;
+    }
+
+    private bool InitializePlaybackCore(WaveFormat format)
+    {
+        if (_waveOut is not null && _queuedWaveProvider is not null && _playbackFormat is not null)
+        {
+            if (WaveFormatMatches(_playbackFormat, format))
+            {
+                if (_waveOut.PlaybackState != PlaybackState.Playing)
+                {
+                    _waveOut.Play();
+                }
+
+                return false;
+            }
+
+            CleanupPlaybackResources();
+        }
+
+        _playbackFormat = format;
+        _queuedWaveProvider = new QueuedWaveProvider(format);
+        _queuedWaveProvider.SegmentCompleted += OnPlaybackSegmentCompleted;
+
+        _waveOut = new WaveOutEvent
+        {
+            DesiredLatency = 100,
+            NumberOfBuffers = 2
+        };
+        _waveOut.PlaybackStopped += OnWaveOutPlaybackStopped;
+        _waveOut.Init(_queuedWaveProvider);
+        _waveOut.Play();
+        return true;
+    }
+
+    private void OnPlaybackSegmentCompleted()
+    {
+        _ = Task.Run(async () =>
+        {
+            await _mutex.WaitAsync();
+            try
+            {
+                if (_playbackSequence.Count == 0)
+                {
+                    return;
+                }
+
+                _playbackSequence.Dequeue();
+                if (_playbackSequence.Count == 0 && _waveOut?.PlaybackState != PlaybackState.Paused)
+                {
+                    IsPaused = false;
+                }
+            }
+            finally
+            {
+                _mutex.Release();
+            }
+
+            PlaybackCompleted?.Invoke(this, EventArgs.Empty);
+        });
+    }
+
+    private void OnWaveOutPlaybackStopped(object? sender, StoppedEventArgs e)
+    {
+        _ = Task.Run(async () =>
+        {
+            await _mutex.WaitAsync();
+            try
+            {
+                if (!ReferenceEquals(_waveOut, sender))
+                {
+                    return;
+                }
+
+                CleanupPlaybackResources();
+                IsPaused = false;
+            }
+            finally
+            {
+                _mutex.Release();
+            }
+        });
+    }
+
+    private static async Task<PreparedSpeech> CreatePreparedSpeechAsync(
+        string? voiceId,
+        int rate,
+        string text,
+        SpeechSynthesisStream stream,
+        CancellationToken cancellationToken)
+    {
+        var waveBytes = await ReadSpeechBytesAsync(stream, cancellationToken);
+        using var memoryStream = new MemoryStream(waveBytes, writable: false);
+        using var waveReader = new WaveFileReader(memoryStream);
+        using var pcmBuffer = new MemoryStream();
+        waveReader.CopyTo(pcmBuffer);
+        return new PreparedSpeech(voiceId, rate, text, pcmBuffer.ToArray(), waveReader.WaveFormat);
+    }
+
+    private static byte[] CreateSilenceBytes(WaveFormat format, TimeSpan duration)
+    {
+        if (duration <= TimeSpan.Zero)
+        {
+            return Array.Empty<byte>();
+        }
+
+        var silenceLength = (int)Math.Round(format.AverageBytesPerSecond * duration.TotalSeconds);
+        return silenceLength <= 0 ? Array.Empty<byte>() : new byte[silenceLength];
+    }
+
+    private static byte[] CombineAudioBytes(byte[] prefix, byte[] content)
+    {
+        if (prefix.Length == 0)
+        {
+            return content;
+        }
+
+        var combined = new byte[prefix.Length + content.Length];
+        System.Buffer.BlockCopy(prefix, 0, combined, 0, prefix.Length);
+        System.Buffer.BlockCopy(content, 0, combined, prefix.Length, content.Length);
+        return combined;
+    }
+
+    private static bool WaveFormatMatches(WaveFormat left, WaveFormat right)
+    {
+        return left.Encoding == right.Encoding
+            && left.SampleRate == right.SampleRate
+            && left.Channels == right.Channels
+            && left.BitsPerSample == right.BitsPerSample
+            && left.BlockAlign == right.BlockAlign
+            && left.AverageBytesPerSecond == right.AverageBytesPerSecond;
     }
 
     private void ThrowIfDisposed()
@@ -472,5 +710,12 @@ public sealed class WindowsSpeechService : ITextToSpeechService
         }
     }
 
-    private sealed record PreparedSpeech(string? VoiceId, int Rate, string Text, byte[] AudioBytes);
+    private sealed record SpeechRequestKey(string? VoiceId, int Rate, string Text);
+
+    private sealed record PreparedSpeech(string? VoiceId, int Rate, string Text, byte[] AudioBytes, WaveFormat AudioFormat)
+    {
+        public SpeechRequestKey Key => new(VoiceId, Rate, Text);
+    }
+
+    private sealed record PrefetchRequest(SpeechRequestKey Key, TaskCompletionSource Completion);
 }

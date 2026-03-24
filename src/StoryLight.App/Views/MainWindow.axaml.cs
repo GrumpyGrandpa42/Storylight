@@ -125,6 +125,37 @@ public sealed partial class MainWindow : Window
         };
     }
 
+    private void OnChapterHeadingClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is not Control control
+            || DataContext is not MainWindowViewModel viewModel
+            || viewModel.ChapterItems.Count == 0)
+        {
+            return;
+        }
+
+        var contextMenu = BuildChapterContextMenu(viewModel);
+        control.ContextMenu = contextMenu;
+        contextMenu.Open(control);
+        e.Handled = true;
+    }
+
+    private static ContextMenu BuildChapterContextMenu(MainWindowViewModel viewModel)
+    {
+        var contextMenu = new ContextMenu();
+
+        foreach (var chapter in viewModel.ChapterItems)
+        {
+            contextMenu.Items.Add(new MenuItem
+            {
+                Header = chapter.IsCurrent ? $"• {chapter.Title}" : chapter.Title,
+                Command = chapter.ActivateCommand
+            });
+        }
+
+        return contextMenu;
+    }
+
     private void InitializeComponent()
     {
         AvaloniaXamlLoader.Load(this);

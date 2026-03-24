@@ -42,6 +42,16 @@ dotnet restore src/StoryLight.App/StoryLight.App.csproj
 dotnet build src/StoryLight.App/StoryLight.App.csproj
 ```
 
+## Tests
+
+From `C:\Repos\StoryLight` in PowerShell:
+
+```powershell
+dotnet test .\StoryLight.sln
+```
+
+The current test suite covers text normalization/parsing helpers and the queued audio provider used by read-aloud playback.
+
 ## Supported Formats
 
 - `.epub`

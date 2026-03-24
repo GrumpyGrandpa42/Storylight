@@ -1,5 +1,4 @@
 using NAudio.Wave;
-using NAudio.Wave.SampleProviders;
 using SherpaOnnx;
 using StoryLight.App.Models;
 
@@ -7,7 +6,7 @@ namespace StoryLight.App.Services;
 
 public sealed class SherpaOnnxSpeechService : ITextToSpeechService
 {
-    private static readonly TimeSpan LeadInDuration = TimeSpan.FromMilliseconds(250);
+    private static readonly TimeSpan InitialLeadInDuration = TimeSpan.FromMilliseconds(120);
 
     public event EventHandler? PlaybackCompleted;
 
@@ -15,21 +14,23 @@ public sealed class SherpaOnnxSpeechService : ITextToSpeechService
     private readonly SherpaVoiceCatalog _voiceCatalog = new();
     private readonly Dictionary<string, OfflineTts> _engineCache = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, SherpaVoiceDefinition> _voiceDefinitions = new(StringComparer.OrdinalIgnoreCase);
+    private readonly List<PreparedSpeech> _preparedSpeechCache = new();
+    private readonly Queue<SpeechRequestKey> _playbackSequence = new();
+    private readonly List<PrefetchRequest> _prefetchQueue = new();
     private CancellationTokenSource? _generationCts;
-    private CancellationTokenSource? _prefetchCts;
-    private CancellationTokenSource? _playbackMonitorCts;
+    private CancellationTokenSource? _prefetchWorkerCts;
     private Task? _activeGenerationTask;
-    private Task? _activePrefetchTask;
+    private Task? _prefetchWorkerTask;
+    private PrefetchRequest? _activePrefetchRequest;
     private WaveOutEvent? _waveOut;
-    private RawSourceWaveStream? _audioStream;
-    private MemoryStream? _audioBuffer;
-    private PreparedSpeech? _preparedSpeech;
+    private QueuedWaveProvider? _queuedWaveProvider;
+    private WaveFormat? _playbackFormat;
     private bool _disposed;
     private int _rate;
     private IReadOnlyList<TtsVoiceInfo> _voices = Array.Empty<TtsVoiceInfo>();
 
     public bool IsAvailable => _voices.Count > 0;
-    public bool IsSpeaking { get; private set; }
+    public bool IsSpeaking => _playbackSequence.Count > 0 && !IsPaused;
     public bool IsPaused { get; private set; }
 
     public int Rate
@@ -76,15 +77,14 @@ public sealed class SherpaOnnxSpeechService : ITextToSpeechService
             if (_voices.Count == 0)
             {
                 SelectedVoiceId = null;
-                _preparedSpeech = null;
                 CancelGenerationCore();
-                CancelPrefetchCore();
+                CancelPrefetchCore(clearPreparedSpeech: true);
                 StopPlaybackCore();
             }
             else if (string.IsNullOrWhiteSpace(SelectedVoiceId) || !_voiceDefinitions.ContainsKey(SelectedVoiceId))
             {
                 SelectedVoiceId = _voices[0].Id;
-                _preparedSpeech = null;
+                ClearPreparedSpeechCacheCore();
             }
 
             StatusSummary = discovery.StatusSummary;
@@ -104,7 +104,7 @@ public sealed class SherpaOnnxSpeechService : ITextToSpeechService
         {
             ThrowIfDisposed();
             SelectedVoiceId = _voices.FirstOrDefault(voice => voice.Id == voiceId)?.Id ?? _voices.FirstOrDefault()?.Id;
-            _preparedSpeech = null;
+            CancelPrefetchCore(clearPreparedSpeech: true);
         }
         finally
         {
@@ -119,108 +119,47 @@ public sealed class SherpaOnnxSpeechService : ITextToSpeechService
             return;
         }
 
-        SherpaVoiceDefinition definition;
-        OfflineTts engine;
-        string? selectedVoiceId;
-        int selectedRate;
-        CancellationTokenSource prefetchCts;
+        PrefetchRequest request;
+        Task completionTask;
 
         await _mutex.WaitAsync(cancellationToken);
         try
         {
             ThrowIfDisposed();
 
-            if (SelectedVoiceId is null || !_voiceDefinitions.TryGetValue(SelectedVoiceId, out definition!))
+            if (SelectedVoiceId is null || !_voiceDefinitions.TryGetValue(SelectedVoiceId, out var definition))
             {
                 return;
             }
 
-            selectedVoiceId = SelectedVoiceId;
-            selectedRate = Rate;
+            var requestKey = new SpeechRequestKey(SelectedVoiceId, Rate, text);
 
-            if (MatchesPreparedSpeech(selectedVoiceId, selectedRate, text))
+            if (ContainsPreparedSpeechCore(requestKey))
             {
                 return;
             }
 
-            CancelPrefetchCore();
-            engine = GetOrCreateEngineCore(definition);
-            prefetchCts = new CancellationTokenSource();
-            _prefetchCts = prefetchCts;
+            if (TryGetPendingPrefetchCore(requestKey, out var existingRequest))
+            {
+                completionTask = existingRequest.Completion.Task;
+            }
+            else
+            {
+                request = new PrefetchRequest(
+                    requestKey,
+                    definition,
+                    new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously));
+                _prefetchQueue.Add(request);
+                completionTask = request.Completion.Task;
+                EnsurePrefetchWorkerCore();
+            }
         }
         finally
         {
             _mutex.Release();
         }
 
-        OfflineTtsGeneratedAudio? generatedAudio = null;
-        Task<OfflineTtsGeneratedAudio>? prefetchTask = null;
-        try
-        {
-            var speed = MapRateToSpeed(selectedRate);
-            prefetchTask = Task.Run(() => engine.Generate(text, speed, definition.SpeakerId), CancellationToken.None);
-            await _mutex.WaitAsync(cancellationToken);
-            try
-            {
-                _activePrefetchTask = prefetchTask;
-            }
-            finally
-            {
-                _mutex.Release();
-            }
-
-            generatedAudio = await prefetchTask;
-            var audioBytes = ConvertSamplesToBytes(generatedAudio.Samples);
-
-            await _mutex.WaitAsync(cancellationToken);
-            try
-            {
-                if (prefetchCts.IsCancellationRequested || !ReferenceEquals(_prefetchCts, prefetchCts))
-                {
-                    return;
-                }
-
-                _preparedSpeech = new PreparedSpeech(selectedVoiceId!, selectedRate, text, audioBytes, generatedAudio.SampleRate);
-                _prefetchCts = null;
-            }
-            finally
-            {
-                _mutex.Release();
-            }
-        }
-        catch
-        {
-            await _mutex.WaitAsync(CancellationToken.None);
-            try
-            {
-                if (ReferenceEquals(_prefetchCts, prefetchCts))
-                {
-                    _prefetchCts = null;
-                }
-            }
-            finally
-            {
-                _mutex.Release();
-            }
-        }
-        finally
-        {
-            await _mutex.WaitAsync(CancellationToken.None);
-            try
-            {
-                if (ReferenceEquals(_activePrefetchTask, prefetchTask))
-                {
-                    _activePrefetchTask = null;
-                }
-            }
-            finally
-            {
-                _mutex.Release();
-            }
-
-            generatedAudio?.Dispose();
-            prefetchCts.Dispose();
-        }
+        await completionTask.WaitAsync(cancellationToken);
     }
 
     public async Task SpeakAsync(string text, CancellationToken cancellationToken = default)
@@ -246,22 +185,19 @@ public sealed class SherpaOnnxSpeechService : ITextToSpeechService
             }
 
             CancelGenerationCore();
-            CancelPrefetchCore();
             StopPlaybackCore();
 
-            if (MatchesPreparedSpeech(SelectedVoiceId, Rate, text))
+            if (TryTakePreparedSpeechCore(new SpeechRequestKey(SelectedVoiceId, Rate, text), out var preparedSpeech))
             {
-                var preparedSpeech = _preparedSpeech!;
-                _preparedSpeech = null;
-                StartPlaybackCore(preparedSpeech.AudioBytes, preparedSpeech.SampleRate);
+                StartPlaybackCore(preparedSpeech, includeLeadIn: true);
                 return;
             }
 
+            CancelPrefetchCore(clearPreparedSpeech: false);
             engine = GetOrCreateEngineCore(definition);
             selectedRate = Rate;
             generationCts = new CancellationTokenSource();
             _generationCts = generationCts;
-            IsSpeaking = true;
             IsPaused = false;
         }
         finally
@@ -296,7 +232,14 @@ public sealed class SherpaOnnxSpeechService : ITextToSpeechService
                     return;
                 }
 
-                StartPlaybackCore(audioBytes, generatedAudio.SampleRate);
+                StartPlaybackCore(
+                    new PreparedSpeech(
+                        SelectedVoiceId,
+                        selectedRate,
+                        text,
+                        audioBytes,
+                        WaveFormat.CreateIeeeFloatWaveFormat(generatedAudio.SampleRate, 1)),
+                    includeLeadIn: true);
                 generatedAudio = null;
             }
             finally
@@ -314,7 +257,6 @@ public sealed class SherpaOnnxSpeechService : ITextToSpeechService
                     _generationCts = null;
                 }
 
-                IsSpeaking = false;
                 IsPaused = false;
             }
             finally
@@ -349,13 +291,12 @@ public sealed class SherpaOnnxSpeechService : ITextToSpeechService
         await _mutex.WaitAsync();
         try
         {
-            if (_waveOut is null || !IsSpeaking || IsPaused)
+            if (_waveOut is null || _playbackSequence.Count == 0 || IsPaused)
             {
                 return;
             }
 
             _waveOut.Pause();
-            IsSpeaking = false;
             IsPaused = true;
         }
         finally
@@ -369,13 +310,12 @@ public sealed class SherpaOnnxSpeechService : ITextToSpeechService
         await _mutex.WaitAsync();
         try
         {
-            if (_waveOut is null || !IsPaused)
+            if (_waveOut is null || _playbackSequence.Count == 0 || !IsPaused)
             {
                 return;
             }
 
             _waveOut.Play();
-            IsSpeaking = true;
             IsPaused = false;
         }
         finally
@@ -390,8 +330,7 @@ public sealed class SherpaOnnxSpeechService : ITextToSpeechService
         try
         {
             CancelGenerationCore();
-            CancelPrefetchCore();
-            _preparedSpeech = null;
+            CancelPrefetchCore(clearPreparedSpeech: true);
             StopPlaybackCore();
         }
         finally
@@ -410,8 +349,9 @@ public sealed class SherpaOnnxSpeechService : ITextToSpeechService
         _disposed = true;
 
         CancelGenerationCore();
-        CancelPrefetchCore();
+        CancelPrefetchCore(clearPreparedSpeech: true);
         StopPlaybackCore();
+        CleanupPlaybackResources();
         WaitForBackgroundWork();
 
         foreach (var engine in _engineCache.Values)
@@ -430,7 +370,7 @@ public sealed class SherpaOnnxSpeechService : ITextToSpeechService
         try
         {
             _mutex.Wait();
-            tasks = new[] { _activeGenerationTask, _activePrefetchTask };
+            tasks = new[] { _activeGenerationTask, _prefetchWorkerTask };
         }
         finally
         {
@@ -476,114 +416,344 @@ public sealed class SherpaOnnxSpeechService : ITextToSpeechService
         }
     }
 
-    private void StartPlaybackCore(byte[] audioBytes, int sampleRate)
-    {
-        _audioBuffer = new MemoryStream(audioBytes, writable: false);
-        _audioStream = new RawSourceWaveStream(_audioBuffer, WaveFormat.CreateIeeeFloatWaveFormat(sampleRate, 1));
-        var sampleProvider = new OffsetSampleProvider(_audioStream.ToSampleProvider())
-        {
-            DelayBy = LeadInDuration
-        };
-
-        _waveOut = new WaveOutEvent();
-        _waveOut.Init(sampleProvider.ToWaveProvider());
-        _waveOut.Play();
-
-        _generationCts = null;
-        _playbackMonitorCts = new CancellationTokenSource();
-        _ = MonitorPlaybackAsync(_waveOut, _playbackMonitorCts.Token);
-        IsSpeaking = true;
-        IsPaused = false;
-    }
-
-    private async Task MonitorPlaybackAsync(WaveOutEvent waveOut, CancellationToken cancellationToken)
-    {
-        try
-        {
-            while (!cancellationToken.IsCancellationRequested)
-            {
-                if (waveOut.PlaybackState == PlaybackState.Stopped)
-                {
-                    await _mutex.WaitAsync(cancellationToken);
-                    try
-                    {
-                        if (ReferenceEquals(_waveOut, waveOut))
-                        {
-                            CleanupPlaybackResources();
-                            IsSpeaking = false;
-                            IsPaused = false;
-                            PlaybackCompleted?.Invoke(this, EventArgs.Empty);
-                        }
-                    }
-                    finally
-                    {
-                        _mutex.Release();
-                    }
-
-                    return;
-                }
-
-                await Task.Delay(50, cancellationToken);
-            }
-        }
-        catch (OperationCanceledException)
-        {
-        }
-    }
-
     private void CancelGenerationCore()
     {
         _generationCts?.Cancel();
         _generationCts = null;
     }
 
-    private void CancelPrefetchCore()
+    private void CancelPrefetchCore(bool clearPreparedSpeech)
     {
-        _prefetchCts?.Cancel();
-        _prefetchCts?.Dispose();
-        _prefetchCts = null;
+        _prefetchWorkerCts?.Cancel();
+        _prefetchWorkerCts?.Dispose();
+        _prefetchWorkerCts = null;
+
+        foreach (var queuedRequest in _prefetchQueue)
+        {
+            queuedRequest.Completion.TrySetCanceled();
+        }
+
+        _prefetchQueue.Clear();
+        _activePrefetchRequest?.Completion.TrySetCanceled();
+        _activePrefetchRequest = null;
+
+        if (clearPreparedSpeech)
+        {
+            ClearPreparedSpeechCacheCore();
+        }
     }
 
     private void StopPlaybackCore()
     {
-        CancelPlaybackMonitor();
+        _queuedWaveProvider?.Clear();
+        _playbackSequence.Clear();
 
-        try
+        if (_waveOut?.PlaybackState == PlaybackState.Paused)
         {
-            _waveOut?.Stop();
-        }
-        catch
-        {
+            _waveOut.Play();
         }
 
-        CleanupPlaybackResources();
-        IsSpeaking = false;
         IsPaused = false;
     }
 
     private void CleanupPlaybackResources()
     {
+        if (_queuedWaveProvider is not null)
+        {
+            _queuedWaveProvider.SegmentCompleted -= OnPlaybackSegmentCompleted;
+        }
+
+        if (_waveOut is not null)
+        {
+            _waveOut.PlaybackStopped -= OnWaveOutPlaybackStopped;
+        }
+
         _waveOut?.Dispose();
-        _audioStream?.Dispose();
-        _audioBuffer?.Dispose();
         _waveOut = null;
-        _audioStream = null;
-        _audioBuffer = null;
+        _queuedWaveProvider = null;
+        _playbackFormat = null;
+        _playbackSequence.Clear();
     }
 
-    private void CancelPlaybackMonitor()
+    private void EnsurePrefetchWorkerCore()
     {
-        _playbackMonitorCts?.Cancel();
-        _playbackMonitorCts?.Dispose();
-        _playbackMonitorCts = null;
+        if (_prefetchWorkerTask is { IsCompleted: false })
+        {
+            return;
+        }
+
+        _prefetchWorkerCts?.Dispose();
+        _prefetchWorkerCts = new CancellationTokenSource();
+        _prefetchWorkerTask = ProcessPrefetchQueueAsync(_prefetchWorkerCts.Token);
     }
 
-    private bool MatchesPreparedSpeech(string? voiceId, int rate, string text)
+    private async Task ProcessPrefetchQueueAsync(CancellationToken cancellationToken)
     {
-        return _preparedSpeech is not null
-            && string.Equals(_preparedSpeech.VoiceId, voiceId, StringComparison.OrdinalIgnoreCase)
-            && _preparedSpeech.Rate == rate
-            && string.Equals(_preparedSpeech.Text, text, StringComparison.Ordinal);
+        while (true)
+        {
+            PrefetchRequest request;
+            OfflineTts engine;
+
+            await _mutex.WaitAsync(CancellationToken.None);
+            try
+            {
+                if (cancellationToken.IsCancellationRequested || _disposed)
+                {
+                    return;
+                }
+
+                if (_prefetchQueue.Count == 0)
+                {
+                    _activePrefetchRequest = null;
+                    return;
+                }
+
+                request = _prefetchQueue[0];
+                _prefetchQueue.RemoveAt(0);
+                _activePrefetchRequest = request;
+
+                if (ContainsPreparedSpeechCore(request.Key))
+                {
+                    request.Completion.TrySetResult();
+                    _activePrefetchRequest = null;
+                    continue;
+                }
+
+                engine = GetOrCreateEngineCore(request.Definition);
+            }
+            finally
+            {
+                _mutex.Release();
+            }
+
+            OfflineTtsGeneratedAudio? generatedAudio = null;
+            try
+            {
+                var speed = MapRateToSpeed(request.Key.Rate);
+                generatedAudio = await Task.Run(
+                    () => engine.Generate(request.Key.Text, speed, request.Definition.SpeakerId),
+                    CancellationToken.None);
+
+                var audioBytes = ConvertSamplesToBytes(generatedAudio.Samples);
+
+                await _mutex.WaitAsync(CancellationToken.None);
+                try
+                {
+                    if (cancellationToken.IsCancellationRequested || _disposed)
+                    {
+                        request.Completion.TrySetCanceled();
+                        return;
+                    }
+
+                    StorePreparedSpeechCore(new PreparedSpeech(
+                        request.Key.VoiceId,
+                        request.Key.Rate,
+                        request.Key.Text,
+                        audioBytes,
+                        WaveFormat.CreateIeeeFloatWaveFormat(generatedAudio.SampleRate, 1)));
+                    TryQueuePreparedSpeechCore(_preparedSpeechCache[^1]);
+                    request.Completion.TrySetResult();
+                    _activePrefetchRequest = null;
+                }
+                finally
+                {
+                    _mutex.Release();
+                }
+            }
+            catch (Exception ex)
+            {
+                await _mutex.WaitAsync(CancellationToken.None);
+                try
+                {
+                    request.Completion.TrySetException(ex);
+                    _activePrefetchRequest = null;
+                }
+                finally
+                {
+                    _mutex.Release();
+                }
+            }
+            finally
+            {
+                generatedAudio?.Dispose();
+            }
+        }
+    }
+
+    private bool TryGetPendingPrefetchCore(SpeechRequestKey key, out PrefetchRequest request)
+    {
+        if (_activePrefetchRequest is not null && _activePrefetchRequest.Key == key)
+        {
+            request = _activePrefetchRequest;
+            return true;
+        }
+
+        var existingRequest = _prefetchQueue.FirstOrDefault(candidate => candidate.Key == key);
+        if (existingRequest is not null)
+        {
+            request = existingRequest;
+            return true;
+        }
+
+        request = null!;
+        return false;
+    }
+
+    private bool ContainsPreparedSpeechCore(SpeechRequestKey key)
+    {
+        return _preparedSpeechCache.Any(candidate => candidate.Key == key);
+    }
+
+    private bool TryTakePreparedSpeechCore(SpeechRequestKey key, out PreparedSpeech preparedSpeech)
+    {
+        var index = _preparedSpeechCache.FindIndex(candidate => candidate.Key == key);
+        if (index >= 0)
+        {
+            preparedSpeech = _preparedSpeechCache[index];
+            _preparedSpeechCache.RemoveAt(index);
+            return true;
+        }
+
+        preparedSpeech = null!;
+        return false;
+    }
+
+    private void StorePreparedSpeechCore(PreparedSpeech preparedSpeech)
+    {
+        _preparedSpeechCache.RemoveAll(candidate => candidate.Key == preparedSpeech.Key);
+        _preparedSpeechCache.Add(preparedSpeech);
+
+        while (_preparedSpeechCache.Count > 2)
+        {
+            _preparedSpeechCache.RemoveAt(0);
+        }
+    }
+
+    private void ClearPreparedSpeechCacheCore()
+    {
+        _preparedSpeechCache.Clear();
+    }
+
+    private void StartPlaybackCore(PreparedSpeech preparedSpeech, bool includeLeadIn)
+    {
+        var format = preparedSpeech.AudioFormat;
+        var needsLeadIn = includeLeadIn && InitializePlaybackCore(format);
+        _queuedWaveProvider!.Clear();
+        _playbackSequence.Clear();
+
+        var initialAudio = needsLeadIn
+            ? CombineAudioBytes(CreateSilenceBytes(format, InitialLeadInDuration), preparedSpeech.AudioBytes)
+            : preparedSpeech.AudioBytes;
+
+        _queuedWaveProvider.Enqueue(initialAudio);
+        _playbackSequence.Enqueue(preparedSpeech.Key);
+        _waveOut!.Play();
+
+        _generationCts = null;
+        IsPaused = false;
+    }
+
+    private bool TryQueuePreparedSpeechCore(PreparedSpeech preparedSpeech)
+    {
+        if (_waveOut is null || _queuedWaveProvider is null || _playbackFormat is null)
+        {
+            return false;
+        }
+
+        if (!WaveFormatMatches(_playbackFormat, preparedSpeech.AudioFormat))
+        {
+            return false;
+        }
+
+        if (_playbackSequence.Contains(preparedSpeech.Key))
+        {
+            return true;
+        }
+
+        _queuedWaveProvider.Enqueue(preparedSpeech.AudioBytes);
+        _playbackSequence.Enqueue(preparedSpeech.Key);
+        return true;
+    }
+
+    private bool InitializePlaybackCore(WaveFormat format)
+    {
+        if (_waveOut is not null && _queuedWaveProvider is not null && _playbackFormat is not null)
+        {
+            if (WaveFormatMatches(_playbackFormat, format))
+            {
+                if (_waveOut.PlaybackState != PlaybackState.Playing)
+                {
+                    _waveOut.Play();
+                }
+
+                return false;
+            }
+
+            CleanupPlaybackResources();
+        }
+
+        _playbackFormat = format;
+        _queuedWaveProvider = new QueuedWaveProvider(format);
+        _queuedWaveProvider.SegmentCompleted += OnPlaybackSegmentCompleted;
+
+        _waveOut = new WaveOutEvent
+        {
+            DesiredLatency = 100,
+            NumberOfBuffers = 2
+        };
+        _waveOut.PlaybackStopped += OnWaveOutPlaybackStopped;
+        _waveOut.Init(_queuedWaveProvider);
+        _waveOut.Play();
+        return true;
+    }
+
+    private void OnPlaybackSegmentCompleted()
+    {
+        _ = Task.Run(async () =>
+        {
+            await _mutex.WaitAsync();
+            try
+            {
+                if (_playbackSequence.Count == 0)
+                {
+                    return;
+                }
+
+                _playbackSequence.Dequeue();
+                if (_playbackSequence.Count == 0 && _waveOut?.PlaybackState != PlaybackState.Paused)
+                {
+                    IsPaused = false;
+                }
+            }
+            finally
+            {
+                _mutex.Release();
+            }
+
+            PlaybackCompleted?.Invoke(this, EventArgs.Empty);
+        });
+    }
+
+    private void OnWaveOutPlaybackStopped(object? sender, StoppedEventArgs e)
+    {
+        _ = Task.Run(async () =>
+        {
+            await _mutex.WaitAsync();
+            try
+            {
+                if (!ReferenceEquals(_waveOut, sender))
+                {
+                    return;
+                }
+
+                CleanupPlaybackResources();
+                IsPaused = false;
+            }
+            finally
+            {
+                _mutex.Release();
+            }
+        });
     }
 
     private static byte[] ConvertSamplesToBytes(float[] samples)
@@ -591,6 +761,31 @@ public sealed class SherpaOnnxSpeechService : ITextToSpeechService
         var bytes = new byte[samples.Length * sizeof(float)];
         Buffer.BlockCopy(samples, 0, bytes, 0, bytes.Length);
         return bytes;
+    }
+
+    private static byte[] CreateSilenceBytes(WaveFormat format, TimeSpan duration)
+    {
+        if (duration <= TimeSpan.Zero)
+        {
+            return Array.Empty<byte>();
+        }
+
+        var bytesPerSecond = format.AverageBytesPerSecond;
+        var silenceLength = (int)Math.Round(bytesPerSecond * duration.TotalSeconds);
+        return silenceLength <= 0 ? Array.Empty<byte>() : new byte[silenceLength];
+    }
+
+    private static byte[] CombineAudioBytes(byte[] prefix, byte[] content)
+    {
+        if (prefix.Length == 0)
+        {
+            return content;
+        }
+
+        var combined = new byte[prefix.Length + content.Length];
+        Buffer.BlockCopy(prefix, 0, combined, 0, prefix.Length);
+        Buffer.BlockCopy(content, 0, combined, prefix.Length, content.Length);
+        return combined;
     }
 
     private static float MapRateToSpeed(int rate)
@@ -607,6 +802,16 @@ public sealed class SherpaOnnxSpeechService : ITextToSpeechService
         };
     }
 
+    private static bool WaveFormatMatches(WaveFormat left, WaveFormat right)
+    {
+        return left.Encoding == right.Encoding
+            && left.SampleRate == right.SampleRate
+            && left.Channels == right.Channels
+            && left.BitsPerSample == right.BitsPerSample
+            && left.BlockAlign == right.BlockAlign
+            && left.AverageBytesPerSecond == right.AverageBytesPerSecond;
+    }
+
     private void ThrowIfDisposed()
     {
         if (_disposed)
@@ -615,5 +820,15 @@ public sealed class SherpaOnnxSpeechService : ITextToSpeechService
         }
     }
 
-    private sealed record PreparedSpeech(string VoiceId, int Rate, string Text, byte[] AudioBytes, int SampleRate);
+    private sealed record SpeechRequestKey(string VoiceId, int Rate, string Text);
+
+    private sealed record PreparedSpeech(string VoiceId, int Rate, string Text, byte[] AudioBytes, WaveFormat AudioFormat)
+    {
+        public SpeechRequestKey Key => new(VoiceId, Rate, Text);
+    }
+
+    private sealed record PrefetchRequest(
+        SpeechRequestKey Key,
+        SherpaVoiceDefinition Definition,
+        TaskCompletionSource Completion);
 }

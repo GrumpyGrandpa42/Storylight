@@ -25,6 +25,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     private string _documentTitle = "StoryLight";
     private string _documentSubtitle = "Import a book or document to begin reading.";
     private string _pageTitle = "No document open";
+    private string _currentChapterTitle = string.Empty;
     private string _pageText = "Your reading page will appear here.";
     private string _status = "Ready.";
     private double _zoomLevel = 1.0;
@@ -37,6 +38,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     private bool _isUpdatingSpeechSelection;
     private bool _continueToNextPage;
     private TtsVoiceInfo? _selectedTtsVoice;
+    private CancellationTokenSource? _readAheadCts;
 
     public MainWindowViewModel(IDocumentImporter documentImporter, IReaderStateStore stateStore, ITextToSpeechService textToSpeechService)
     {
@@ -45,6 +47,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         _textToSpeechService = textToSpeechService;
 
         LibraryItems = new ObservableCollection<LibraryItem>();
+        ChapterItems = new ObservableCollection<ChapterNavigationItem>();
         TtsVoices = new ObservableCollection<TtsVoiceInfo>();
         SpeechRates = new ReadOnlyCollection<int>(new[] { -3, -2, -1, 0, 1, 2, 3 });
 
@@ -69,6 +72,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     }
 
     public ObservableCollection<LibraryItem> LibraryItems { get; }
+    public ObservableCollection<ChapterNavigationItem> ChapterItems { get; }
     public ObservableCollection<TtsVoiceInfo> TtsVoices { get; }
 
     public IReadOnlyList<int> SpeechRates { get; }
@@ -93,6 +97,18 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             if (SetProperty(ref _pageTitle, value))
             {
                 RaisePropertyChanged(nameof(HasPageTitle));
+            }
+        }
+    }
+
+    public string CurrentChapterTitle
+    {
+        get => _currentChapterTitle;
+        private set
+        {
+            if (SetProperty(ref _currentChapterTitle, value))
+            {
+                RaisePropertyChanged(nameof(CanOpenChapterList));
             }
         }
     }
@@ -169,6 +185,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
     public bool HasPageTitle => !string.IsNullOrWhiteSpace(PageTitle);
 
+    public bool CanOpenChapterList => ChapterItems.Count > 0 && !string.IsNullOrWhiteSpace(CurrentChapterTitle);
+
     public string PageStatus => _pages.Count == 0
         ? "No pages"
         : $"Page {CurrentPageNumber} of {PageCount}";
@@ -180,6 +198,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         {
             if (SetProperty(ref _speechRate, value))
             {
+                CancelReadAhead();
                 _appState.Speech.Rate = value;
                 _textToSpeechService.Rate = value;
                 _ = PersistStateAsync();
@@ -196,6 +215,15 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         {
             if (SetProperty(ref _continueToNextPage, value))
             {
+                if (value && _activeSpeechPageIndex is not null)
+                {
+                    ScheduleReadAhead(_activeSpeechPageIndex.Value);
+                }
+                else if (!value)
+                {
+                    CancelReadAhead();
+                }
+
                 _appState.Speech.ContinueToNextPage = value;
                 _ = PersistStateAsync();
             }
@@ -284,6 +312,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
     public void Dispose()
     {
+        CancelReadAhead();
         _textToSpeechService.PlaybackCompleted -= OnPlaybackCompleted;
         _textToSpeechService.Dispose();
     }
@@ -359,6 +388,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
         try
         {
+            await ResetSpeechAsync(updateStatus: false);
+
             if (!File.Exists(path))
             {
                 Status = "The selected file no longer exists.";
@@ -517,15 +548,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             return;
         }
 
-        var nextIndex = Math.Clamp(CurrentPageIndex + delta, 0, _pages.Count - 1);
-        if (nextIndex == CurrentPageIndex)
-        {
-            return;
-        }
-
-        CurrentPageIndex = nextIndex;
-        ShowCurrentPage();
-        _ = PersistStateAsync();
+        GoToPage(Math.Clamp(CurrentPageIndex + delta, 0, _pages.Count - 1));
     }
 
     private void ChangeZoom(double delta)
@@ -540,6 +563,9 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             return;
         }
 
+        CancelReadAhead();
+        _activeSpeechPageIndex = null;
+        _ = _textToSpeechService.StopAsync();
         var currentSection = _pages.Count == 0 ? 0 : _pages[CurrentPageIndex].SectionIndex;
         BuildPages(_currentDocument, FindPageIndexForSection(currentSection));
         _appState.DefaultZoomLevel = ZoomLevel;
@@ -572,6 +598,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             _pages.Add(new ReaderPage(document.Metadata.Title, "No readable content was found.", 0, "empty"));
         }
 
+        BuildChapterItems(document);
         CurrentPageIndex = Math.Clamp(initialPageIndex, 0, _pages.Count - 1);
         ShowCurrentPage();
     }
@@ -586,8 +613,10 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         }
 
         var page = _pages[CurrentPageIndex];
+        CurrentChapterTitle = GetChapterTitle(page.SectionIndex);
         PageTitle = ShouldHidePageTitle(page) ? string.Empty : page.Title;
         PageText = page.Text;
+        UpdateCurrentChapterSelection(page.SectionIndex);
 
         if (SelectedLibraryItem is not null)
         {
@@ -604,6 +633,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             return;
         }
 
+        CancelReadAhead();
         await _textToSpeechService.SetVoiceAsync(SelectedTtsVoice.Id);
         _appState.Speech.VoiceId = SelectedTtsVoice.Id;
         await PersistStateAsync();
@@ -678,7 +708,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             await _textToSpeechService.SpeakAsync(_pages[CurrentPageIndex].Text);
             _activeSpeechPageIndex = CurrentPageIndex;
             Status = "Reading current page aloud.";
-            _ = PrefetchNextPageAsync(CurrentPageIndex);
+            ScheduleReadAhead(CurrentPageIndex);
         }
         catch (Exception ex)
         {
@@ -688,16 +718,32 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         RefreshCommandStates();
     }
 
-    private async Task PrefetchNextPageAsync(int currentPageIndex)
+    private void ScheduleReadAhead(int currentPageIndex)
     {
+        CancelReadAhead();
+
         if (!ContinueToNextPage || currentPageIndex >= _pages.Count - 1)
         {
             return;
         }
 
+        _readAheadCts = new CancellationTokenSource();
+        _ = MaintainReadAheadAsync(currentPageIndex, _readAheadCts.Token);
+    }
+
+    private async Task MaintainReadAheadAsync(int currentPageIndex, CancellationToken cancellationToken)
+    {
         try
         {
-            await _textToSpeechService.PrefetchAsync(_pages[currentPageIndex + 1].Text);
+            var lastPageIndex = Math.Min(currentPageIndex + 2, _pages.Count - 1);
+            for (var pageIndex = currentPageIndex + 1; pageIndex <= lastPageIndex; pageIndex++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                await _textToSpeechService.PrefetchAsync(_pages[pageIndex].Text, cancellationToken);
+            }
+        }
+        catch (OperationCanceledException)
+        {
         }
         catch
         {
@@ -720,9 +766,22 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
     private async Task StopSpeechAsync()
     {
+        await ResetSpeechAsync(updateStatus: false);
+        Status = "Read-aloud stopped.";
+        RefreshCommandStates();
+    }
+
+    private async Task ResetSpeechAsync(bool updateStatus)
+    {
+        CancelReadAhead();
         await _textToSpeechService.StopAsync();
         _activeSpeechPageIndex = null;
-        Status = "Read-aloud stopped.";
+
+        if (updateStatus)
+        {
+            Status = "Read-aloud stopped.";
+        }
+
         RefreshCommandStates();
     }
 
@@ -734,26 +793,42 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
             if (!ContinueToNextPage || _activeSpeechPageIndex is null)
             {
+                CancelReadAhead();
                 _activeSpeechPageIndex = null;
                 return;
             }
 
             if (_activeSpeechPageIndex.Value != CurrentPageIndex)
             {
+                CancelReadAhead();
                 _activeSpeechPageIndex = null;
                 return;
             }
 
             if (CurrentPageIndex >= PageCount - 1)
             {
+                CancelReadAhead();
                 _activeSpeechPageIndex = null;
                 Status = "Reached the end of the document.";
                 return;
             }
 
             ChangePage(1);
-            await ReadCurrentPageAsync();
+            _activeSpeechPageIndex = CurrentPageIndex;
+            ScheduleReadAhead(CurrentPageIndex);
+
+            if (!_textToSpeechService.IsSpeaking && !_textToSpeechService.IsPaused)
+            {
+                await ReadCurrentPageAsync();
+            }
         });
+    }
+
+    private void CancelReadAhead()
+    {
+        _readAheadCts?.Cancel();
+        _readAheadCts?.Dispose();
+        _readAheadCts = null;
     }
 
     private async Task PersistStateAsync()
@@ -944,6 +1019,84 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         return 0;
     }
 
+    private void GoToPage(int pageIndex)
+    {
+        if (_pages.Count == 0)
+        {
+            return;
+        }
+
+        var nextIndex = Math.Clamp(pageIndex, 0, _pages.Count - 1);
+        if (nextIndex == CurrentPageIndex)
+        {
+            return;
+        }
+
+        CancelReadAhead();
+        CurrentPageIndex = nextIndex;
+        ShowCurrentPage();
+        _ = PersistStateAsync();
+    }
+
+    private void GoToChapter(int sectionIndex)
+    {
+        if (_pages.Count == 0)
+        {
+            return;
+        }
+
+        GoToPage(FindPageIndexForSection(sectionIndex));
+    }
+
+    private void BuildChapterItems(NormalizedDocument document)
+    {
+        ChapterItems.Clear();
+
+        for (var sectionIndex = 0; sectionIndex < document.Sections.Count; sectionIndex++)
+        {
+            var localSectionIndex = sectionIndex;
+            var title = BuildChapterTitle(document, document.Sections[sectionIndex], sectionIndex);
+            ChapterItems.Add(new ChapterNavigationItem(
+                title,
+                sectionIndex,
+                new RelayCommand(() => GoToChapter(localSectionIndex))));
+        }
+
+        RaisePropertyChanged(nameof(CanOpenChapterList));
+    }
+
+    private string GetChapterTitle(int sectionIndex)
+    {
+        if (_currentDocument is null
+            || sectionIndex < 0
+            || sectionIndex >= _currentDocument.Sections.Count)
+        {
+            return string.Empty;
+        }
+
+        return BuildChapterTitle(_currentDocument, _currentDocument.Sections[sectionIndex], sectionIndex);
+    }
+
+    private void UpdateCurrentChapterSelection(int sectionIndex)
+    {
+        foreach (var chapter in ChapterItems)
+        {
+            chapter.IsCurrent = chapter.SectionIndex == sectionIndex;
+        }
+    }
+
+    private static string BuildChapterTitle(NormalizedDocument document, DocumentSection section, int sectionIndex)
+    {
+        if (!string.IsNullOrWhiteSpace(section.Title))
+        {
+            return section.Title.Trim();
+        }
+
+        return document.Metadata.Format == DocumentFormat.Pdf
+            ? $"Page {sectionIndex + 1}"
+            : $"Chapter {sectionIndex + 1}";
+    }
+
     private static bool ShouldHidePageTitle(ReaderPage page)
     {
         if (string.IsNullOrWhiteSpace(page.Title) || string.IsNullOrWhiteSpace(page.Text))
@@ -999,11 +1152,14 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         {
             _currentDocument = null;
             _pages.Clear();
+            ChapterItems.Clear();
             CurrentPageIndex = 0;
+            CurrentChapterTitle = string.Empty;
             PageTitle = "No document open";
             PageText = "Your reading page will appear here.";
             DocumentTitle = "StoryLight";
             DocumentSubtitle = "Import a book or document to begin reading.";
+            RaisePropertyChanged(nameof(CanOpenChapterList));
         }
 
         SelectedLibraryItem = LibraryItems.FirstOrDefault();

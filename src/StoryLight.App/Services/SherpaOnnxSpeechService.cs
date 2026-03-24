@@ -186,6 +186,7 @@ public sealed class SherpaOnnxSpeechService : ITextToSpeechService
 
             CancelGenerationCore();
             StopPlaybackCore();
+            InitializePlaybackCore(AudioPlaybackUtilities.PlaybackFormat);
 
             if (TryTakePreparedSpeechCore(new SpeechRequestKey(SelectedVoiceId, Rate, text), out var preparedSpeech))
             {
@@ -222,7 +223,9 @@ public sealed class SherpaOnnxSpeechService : ITextToSpeechService
             }
 
             generatedAudio = await generationTask;
-            var audioBytes = ConvertSamplesToBytes(generatedAudio.Samples);
+            var audioBytes = AudioPlaybackUtilities.ConvertToPlaybackFormat(
+                ConvertSamplesToBytes(generatedAudio.Samples),
+                WaveFormat.CreateIeeeFloatWaveFormat(generatedAudio.SampleRate, 1));
 
             await _mutex.WaitAsync(cancellationToken);
             try
@@ -238,7 +241,7 @@ public sealed class SherpaOnnxSpeechService : ITextToSpeechService
                         selectedRate,
                         text,
                         audioBytes,
-                        WaveFormat.CreateIeeeFloatWaveFormat(generatedAudio.SampleRate, 1)),
+                        AudioPlaybackUtilities.PlaybackFormat),
                     includeLeadIn: true);
                 generatedAudio = null;
             }
@@ -534,7 +537,9 @@ public sealed class SherpaOnnxSpeechService : ITextToSpeechService
                     () => engine.Generate(request.Key.Text, speed, request.Definition.SpeakerId),
                     CancellationToken.None);
 
-                var audioBytes = ConvertSamplesToBytes(generatedAudio.Samples);
+                var audioBytes = AudioPlaybackUtilities.ConvertToPlaybackFormat(
+                    ConvertSamplesToBytes(generatedAudio.Samples),
+                    WaveFormat.CreateIeeeFloatWaveFormat(generatedAudio.SampleRate, 1));
 
                 await _mutex.WaitAsync(CancellationToken.None);
                 try
@@ -550,7 +555,7 @@ public sealed class SherpaOnnxSpeechService : ITextToSpeechService
                         request.Key.Rate,
                         request.Key.Text,
                         audioBytes,
-                        WaveFormat.CreateIeeeFloatWaveFormat(generatedAudio.SampleRate, 1)));
+                        AudioPlaybackUtilities.PlaybackFormat));
                     TryQueuePreparedSpeechCore(_preparedSpeechCache[^1]);
                     request.Completion.TrySetResult();
                     _activePrefetchRequest = null;

@@ -173,6 +173,7 @@ public sealed class WindowsSpeechService : ITextToSpeechService
         {
             ThrowIfDisposed();
             StopPlaybackCore();
+            InitializePlaybackCore(AudioPlaybackUtilities.PlaybackFormat);
 
             if (TryTakePreparedSpeechCore(new SpeechRequestKey(SelectedVoiceId, Rate, text), out var preparedSpeech))
             {
@@ -665,7 +666,8 @@ public sealed class WindowsSpeechService : ITextToSpeechService
         using var waveReader = new WaveFileReader(memoryStream);
         using var pcmBuffer = new MemoryStream();
         waveReader.CopyTo(pcmBuffer);
-        return new PreparedSpeech(voiceId, rate, text, pcmBuffer.ToArray(), waveReader.WaveFormat);
+        var convertedBytes = AudioPlaybackUtilities.ConvertToPlaybackFormat(pcmBuffer.ToArray(), waveReader.WaveFormat);
+        return new PreparedSpeech(voiceId, rate, text, convertedBytes, AudioPlaybackUtilities.PlaybackFormat);
     }
 
     private static byte[] CreateSilenceBytes(WaveFormat format, TimeSpan duration)

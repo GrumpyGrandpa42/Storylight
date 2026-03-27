@@ -305,6 +305,37 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         SelectedLibraryItem = item;
     }
 
+    public async Task MoveLibraryItemAsync(LibraryItem sourceItem, LibraryItem targetItem, bool insertAfter)
+    {
+        if (IsBusy || sourceItem == targetItem)
+        {
+            return;
+        }
+
+        var sourceIndex = LibraryItems.IndexOf(sourceItem);
+        var targetIndex = LibraryItems.IndexOf(targetItem);
+        if (sourceIndex < 0 || targetIndex < 0)
+        {
+            return;
+        }
+
+        var destinationIndex = targetIndex + (insertAfter ? 1 : 0);
+        if (destinationIndex > sourceIndex)
+        {
+            destinationIndex--;
+        }
+
+        if (destinationIndex == sourceIndex)
+        {
+            return;
+        }
+
+        LibraryItems.Move(sourceIndex, destinationIndex);
+        SyncLibraryStateOrder();
+        await PersistStateAsync();
+        Status = $"Moved {sourceItem.Title}.";
+    }
+
     public void HandleWindowActivated()
     {
         _ = RefreshTtsOptionsAsync(updateStatus: false, persistState: false);
@@ -328,7 +359,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             _appState.ReadingPositions = state.ReadingPositions;
             _appState.Speech = state.Speech ?? new SpeechSettings();
 
-            foreach (var item in _appState.Library.OrderByDescending(item => item.LastOpenedUtc))
+            foreach (var item in _appState.Library)
             {
                 item.RefreshDerivedProperties();
                 LibraryItems.Add(item);
@@ -456,7 +487,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
                 LastOpenedUtc = DateTimeOffset.UtcNow
             };
 
-            _appState.Library.Add(existing);
+            _appState.Library.Insert(0, existing);
             LibraryItems.Insert(0, existing);
         }
         else
@@ -466,12 +497,6 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             existing.CoverImageData = document.Metadata.CoverImageData;
             existing.LastOpenedUtc = DateTimeOffset.UtcNow;
             existing.RefreshDerivedProperties();
-
-            var existingIndex = LibraryItems.IndexOf(existing);
-            if (existingIndex > 0)
-            {
-                LibraryItems.Move(existingIndex, 0);
-            }
         }
 
         return existing;
@@ -833,6 +858,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
     private async Task PersistStateAsync()
     {
+        SyncLibraryStateOrder();
         _appState.DefaultZoomLevel = ZoomLevel;
         _appState.IsLibraryCollapsed = IsLibraryCollapsed;
 
@@ -1140,6 +1166,12 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             && SelectedLibraryItem.Format == DocumentFormat.Epub
             && SelectedLibraryItem.SourcePath.EndsWith(".epub", StringComparison.OrdinalIgnoreCase)
             && File.Exists(SelectedLibraryItem.SourcePath);
+    }
+
+    private void SyncLibraryStateOrder()
+    {
+        _appState.Library.Clear();
+        _appState.Library.AddRange(LibraryItems);
     }
 
     private void RemoveItemFromLibrary(LibraryItem item)

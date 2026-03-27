@@ -1,30 +1,25 @@
 {
   "format": 1,
   "restore": {
-    "C:\\Repos\\StoryLight\\src\\StoryLight.App\\StoryLight.App.csproj": {}
+    "/mnt/c/Repos/StoryLight/src/StoryLight.App/StoryLight.App.csproj": {}
   },
   "projects": {
-    "C:\\Repos\\StoryLight\\src\\StoryLight.App\\StoryLight.App.csproj": {
+    "/mnt/c/Repos/StoryLight/src/StoryLight.App/StoryLight.App.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Repos\\StoryLight\\src\\StoryLight.App\\StoryLight.App.csproj",
+        "projectUniqueName": "/mnt/c/Repos/StoryLight/src/StoryLight.App/StoryLight.App.csproj",
         "projectName": "StoryLight.App",
-        "projectPath": "C:\\Repos\\StoryLight\\src\\StoryLight.App\\StoryLight.App.csproj",
-        "packagesPath": "C:\\Users\\dwayn\\.nuget\\packages\\",
-        "outputPath": "C:\\Repos\\StoryLight\\src\\StoryLight.App\\obj\\",
+        "projectPath": "/mnt/c/Repos/StoryLight/src/StoryLight.App/StoryLight.App.csproj",
+        "packagesPath": "/home/dwayne/.nuget/packages/",
+        "outputPath": "/mnt/c/Repos/StoryLight/src/StoryLight.App/obj/",
         "projectStyle": "PackageReference",
-        "fallbackFolders": [
-          "C:\\Program Files\\dotnet\\sdk\\NuGetFallbackFolder"
-        ],
         "configFilePaths": [
-          "C:\\Users\\dwayn\\AppData\\Roaming\\NuGet\\NuGet.Config",
-          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
+          "/home/dwayne/.nuget/NuGet/NuGet.Config"
         ],
         "originalTargetFrameworks": [
           "net8.0-windows10.0.19041.0"
         ],
         "sources": {
-          "C:\\Program Files (x86)\\Microsoft SDKs\\NuGetPackages\\": {},
           "https://api.nuget.org/v3/index.json": {}
         },
         "frameworks": {
@@ -37,13 +32,7 @@
           "warnAsError": [
             "NU1605"
           ]
-        },
-        "restoreAuditProperties": {
-          "enableAudit": "true",
-          "auditLevel": "low",
-          "auditMode": "direct"
-        },
-        "SdkAnalysisLevel": "10.0.200"
+        }
       },
       "frameworks": {
         "net8.0-windows10.0.19041": {
@@ -88,18 +77,22 @@
           "downloadDependencies": [
             {
               "name": "Microsoft.Windows.SDK.NET.Ref",
-              "version": "[10.0.19041.57, 10.0.19041.57]"
+              "version": "[10.0.19041.56, 10.0.19041.56]"
+            },
+            {
+              "name": "Microsoft.WindowsDesktop.App.Ref",
+              "version": "[8.0.25, 8.0.25]"
             }
           ],
           "frameworkReferences": {
             "Microsoft.NETCore.App": {
               "privateAssets": "all"
             },
-            "Microsoft.Windows.SDK.NET.Ref.Windows": {
+            "Microsoft.Windows.SDK.NET.Ref": {
               "privateAssets": "all"
             }
           },
-          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\10.0.201/PortableRuntimeIdentifierGraph.json"
+          "runtimeIdentifierGraphPath": "/usr/lib/dotnet/sdk/8.0.125/PortableRuntimeIdentifierGraph.json"
         }
       }
     }

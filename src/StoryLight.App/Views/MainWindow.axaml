@@ -75,7 +75,10 @@
                       CornerRadius="10"
                       Margin="0,0,0,10"
                       Padding="10"
-                      PointerPressed="OnLibraryItemPointerPressed">
+                      PointerPressed="OnLibraryItemPointerPressed"
+                      PointerMoved="OnLibraryItemPointerMoved"
+                      PointerReleased="OnLibraryItemPointerReleased"
+                      DragDrop.AllowDrop="True">
                 <Grid ColumnDefinitions="72,*">
                   <Border Width="72" Height="100" CornerRadius="8" Background="#E6D9BD" BorderBrush="#C9BA9C" BorderThickness="1">
                     <Grid>
@@ -89,12 +92,25 @@
                     </Grid>
                   </Border>
 
-                  <StackPanel Grid.Column="1" Margin="10,0,0,0" Spacing="4">
-                    <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap" />
-                    <TextBlock Text="{Binding Subtitle}" Foreground="#6B5B45" FontSize="12" TextWrapping="Wrap" />
-                    <TextBlock Text="{Binding ProgressText}" FontSize="12" FontWeight="SemiBold" />
-                    <TextBlock Text="{Binding LastOpenedDisplay}" FontSize="11" Foreground="#8B7758" />
-                  </StackPanel>
+                  <Grid Grid.Column="1"
+                        Margin="10,0,0,0"
+                        RowDefinitions="Auto,Auto">
+                    <Button Grid.Row="0"
+                            Classes="libraryItemMenu"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Top"
+                            Margin="0,-6,8,0"
+                            Content="..."
+                            Click="OnLibraryItemMenuClick"
+                            ToolTip.Tip="Book actions" />
+
+                    <StackPanel Grid.Row="1" Margin="0,-2,0,0" Spacing="4">
+                      <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                      <TextBlock Text="{Binding Subtitle}" Foreground="#6B5B45" FontSize="12" TextWrapping="Wrap" />
+                      <TextBlock Text="{Binding ProgressText}" FontSize="12" FontWeight="SemiBold" />
+                      <TextBlock Text="{Binding LastOpenedDisplay}" FontSize="11" Foreground="#8B7758" />
+                    </StackPanel>
+                  </Grid>
                 </Grid>
               </Border>
             </DataTemplate>

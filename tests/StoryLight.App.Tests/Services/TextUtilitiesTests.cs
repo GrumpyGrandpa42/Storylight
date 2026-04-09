@@ -51,6 +51,45 @@ public sealed class TextUtilitiesTests
     }
 
     [Fact]
+    public void EstimatePageMetrics_ShrinkInBothDimensionsAsZoomIncreases()
+    {
+        Assert.Equal(34, TextUtilities.EstimateLinesPerPage(1.0));
+        Assert.Equal(72, TextUtilities.EstimateCharactersPerLine(1.0));
+        Assert.Equal(17, TextUtilities.EstimateLinesPerPage(2.0));
+        Assert.Equal(36, TextUtilities.EstimateCharactersPerLine(2.0));
+    }
+
+    [Fact]
+    public void PaginatePlainText_SplitsParagraphsByEstimatedWrappedLines()
+    {
+        const string text = """
+            alpha beta gamma delta epsilon zeta
+
+            one two three four five six
+
+            red blue green yellow orange purple
+            """;
+
+        var pages = TextUtilities.PaginatePlainText(text, linesPerPage: 4, charactersPerLine: 12);
+
+        Assert.Collection(
+            pages,
+            page => Assert.Equal("alpha beta gamma delta epsilon zeta", page),
+            page => Assert.Equal("one two three four five six\n\nred blue green yellow orange purple", page));
+    }
+
+    [Fact]
+    public void PaginatePlainText_SplitsOversizedParagraphIntoMultiplePages()
+    {
+        const string text = "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu";
+
+        var pages = TextUtilities.PaginatePlainText(text, linesPerPage: 2, charactersPerLine: 12);
+
+        Assert.True(pages.Count >= 2);
+        Assert.All(pages, page => Assert.False(string.IsNullOrWhiteSpace(page)));
+    }
+
+    [Fact]
     public void BuildDocxText_JoinsParagraphs()
     {
         const string xml = """

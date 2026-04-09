@@ -600,7 +600,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     private void BuildPages(NormalizedDocument document, int initialPageIndex)
     {
         _pages.Clear();
-        var charsPerPage = GetCharactersPerPage(document.Metadata.Format);
+        var linesPerPage = GetLinesPerPage(document.Metadata.Format);
+        var charactersPerLine = GetCharactersPerLine(document.Metadata.Format);
 
         for (var sectionIndex = 0; sectionIndex < document.Sections.Count; sectionIndex++)
         {
@@ -612,7 +613,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
                 continue;
             }
 
-            foreach (var pageText in SplitIntoPages(section.Text, charsPerPage))
+            foreach (var pageText in TextUtilities.PaginatePlainText(section.Text, linesPerPage, charactersPerLine))
             {
                 _pages.Add(new ReaderPage(section.Title, pageText, sectionIndex, section.Anchor));
             }
@@ -968,68 +969,24 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         return Math.Clamp(Math.Round(value, 2), 0.25, 5.0);
     }
 
-    private int GetCharactersPerPage(DocumentFormat format)
+    private int GetLinesPerPage(DocumentFormat format)
     {
         if (format == DocumentFormat.Pdf)
         {
             return int.MaxValue;
         }
 
-        var baseCharacters = 2600d / ZoomLevel;
-        return Math.Max(800, (int)Math.Round(baseCharacters));
+        return TextUtilities.EstimateLinesPerPage(ZoomLevel);
     }
 
-    private static IEnumerable<string> SplitIntoPages(string text, int charactersPerPage)
+    private int GetCharactersPerLine(DocumentFormat format)
     {
-        var paragraphs = text.Split(new[] { "\n\n" }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        var buffer = new List<string>();
-        var currentLength = 0;
-
-        foreach (var paragraph in paragraphs)
+        if (format == DocumentFormat.Pdf)
         {
-            if (currentLength > 0 && currentLength + paragraph.Length > charactersPerPage)
-            {
-                yield return string.Join(Environment.NewLine + Environment.NewLine, buffer);
-                buffer.Clear();
-                currentLength = 0;
-            }
-
-            if (paragraph.Length > charactersPerPage)
-            {
-                foreach (var chunk in ChunkLongParagraph(paragraph, charactersPerPage))
-                {
-                    if (buffer.Count > 0)
-                    {
-                        yield return string.Join(Environment.NewLine + Environment.NewLine, buffer);
-                        buffer.Clear();
-                    }
-
-                    yield return chunk;
-                }
-
-                currentLength = 0;
-                continue;
-            }
-
-            buffer.Add(paragraph);
-            currentLength += paragraph.Length + 2;
+            return int.MaxValue;
         }
 
-        if (buffer.Count > 0)
-        {
-            yield return string.Join(Environment.NewLine + Environment.NewLine, buffer);
-        }
-    }
-
-    private static IEnumerable<string> ChunkLongParagraph(string paragraph, int chunkSize)
-    {
-        var start = 0;
-        while (start < paragraph.Length)
-        {
-            var length = Math.Min(chunkSize, paragraph.Length - start);
-            yield return paragraph.Substring(start, length).Trim();
-            start += length;
-        }
+        return TextUtilities.EstimateCharactersPerLine(ZoomLevel);
     }
 
     private int FindPageIndexForSection(int sectionIndex)
